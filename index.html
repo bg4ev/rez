@@ -1,0 +1,1793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AS NYC – Property Research Webtool</title>
+<style>
+    :root{
+        --paper:#f4f4f4;
+        --card:#ffffff;
+        --ink:#1a1a1a;
+        --ink-soft:#5c5c5c;
+        --rule:#dcdcdc;
+        --quiet:#8f8f8f;
+        --signal:#d62b1f;
+        --ok:#0d8f4f;
+        --warn:#c2710c;
+        --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+        --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--sans);
+    font-size:16px;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 24px 96px}
+  header{margin-bottom:32px}
+  h1{
+    font-size:26px;
+    font-weight:600;
+    letter-spacing:-0.02em;
+    margin:0 0 6px;
+  }
+  .sub{color:var(--ink-soft);font-size:15px;max-width:64ch;margin:0}
+
+  .panel{
+    background:var(--card);
+    border:1px solid var(--rule);
+    border-radius:6px;
+    padding:20px;
+    margin-bottom:20px;
+  }
+  button:focus-visible, input:focus-visible, textarea:focus-visible{
+    outline:2px solid var(--ink);outline-offset:2px;
+  }
+
+  label{display:block;font-size:14px;color:var(--ink-soft);margin-bottom:6px}
+  input[type=text], textarea{
+    width:100%;
+    font-family:var(--sans);
+    font-size:16px;
+    color:var(--ink);
+    background:var(--card);
+    border:1px solid var(--rule);
+    border-radius:5px;
+    padding:11px 13px;
+  }
+  input[type=text]:focus, textarea:focus{border-color:var(--ink)}
+  /* The single address field. One line by default, grows as lines are added. */
+  textarea#addr{
+    font-family:var(--sans);
+    font-size:16px;
+    line-height:1.5;
+    resize:none;
+    overflow:hidden;
+    min-height:46px;
+  }
+  .row{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}
+  .row > div{flex:1 1 320px}
+  button.go{
+    font:inherit;font-weight:500;font-size:15px;
+    background:var(--ink);color:#fff;
+    border:1px solid var(--ink);border-radius:5px;
+    padding:11px 22px;cursor:pointer;
+  }
+  .row > button.go{margin-top:26px}
+  button.go:hover{background:#000}
+  button.go[disabled]{opacity:.5;cursor:default}
+  .hint{font-size:13px;color:var(--quiet);margin-top:10px}
+
+  .bar{
+    display:flex;align-items:center;justify-content:space-between;
+    gap:16px;flex-wrap:wrap;
+    margin:28px 0 14px;
+  }
+  .count{font-size:14px;color:var(--ink-soft)}
+  a.dl{
+    font-size:14px;font-weight:500;color:var(--ink);
+    border:1px solid var(--rule);background:var(--card);
+    border-radius:5px;padding:8px 14px;text-decoration:none;
+  }
+  a.dl:hover{border-color:var(--ink)}
+
+  .result{
+    background:var(--card);
+    border:1px solid var(--rule);
+    border-radius:6px;
+    padding:18px 20px;
+    margin-bottom:12px;
+  }
+  .result h2{
+    font-size:17px;font-weight:600;margin:0 0 2px;letter-spacing:-0.01em;
+  }
+  .meta{font-family:var(--mono);font-size:13px;color:var(--ink-soft);margin-bottom:14px}
+  .meta .owner{font-family:var(--sans)}
+
+  /* per-card category tabs */
+  .rtabs{
+    display:flex;gap:4px;flex-wrap:wrap;
+    border-bottom:1px solid var(--rule);
+    margin:0 0 6px;padding-bottom:8px;
+  }
+  .rtab{
+    font:inherit;font-size:13px;font-weight:500;
+    background:none;border:1px solid transparent;
+    color:var(--ink-soft);
+    padding:5px 11px;border-radius:5px;cursor:pointer;
+    display:inline-flex;align-items:center;gap:7px;
+  }
+  .rtab:hover{color:var(--ink);background:var(--paper)}
+  .rtab[aria-selected="true"]{
+    background:var(--paper);
+    border-color:var(--rule);
+    color:var(--ink);
+  }
+  .rtab .badge{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--signal)}
+  .rtab .badge.zero{color:var(--ok);font-weight:400}
+  .rtab .badge.stub{color:var(--quiet);font-weight:400}
+  .rpanel[hidden]{display:none}
+
+  /* The BBL is needed to search every external system, so it belongs on
+     the card rather than repeated inside four tabs. */
+  .cardhead{display:flex;gap:16px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+  .cardhead .who{flex:1 1 320px;min-width:0}
+  .cardhead .taglist{margin:0;flex:none}
+
+  .taglist{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 2px}
+  .tag{
+    display:inline-flex;flex-direction:column;gap:1px;
+    border:1px solid var(--rule);border-radius:5px;
+    padding:6px 13px;background:var(--paper);
+  }
+  .tag-k{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--quiet)}
+  .tag-v{font-family:var(--mono);font-size:17px;font-weight:600;color:var(--ink)}
+  a.portal-link{
+    display:inline-block;
+    font-size:14px;font-weight:500;color:var(--ink);
+    border:1px solid var(--rule);background:var(--card);
+    border-radius:5px;padding:8px 14px;text-decoration:none;
+  }
+  a.portal-link:hover{border-color:var(--ink)}
+  .stage-note{font-size:13px;color:var(--ink-soft);margin-left:6px}
+  .stage-bar{display:inline-flex;gap:3px;margin-left:10px;vertical-align:2px}
+  .stage-pip{width:20px;height:5px;border-radius:2px;background:var(--rule)}
+  .stage-pip.on{background:var(--signal)}
+  .note{font-size:13px;color:var(--quiet);margin:16px 0 0;max-width:62ch}
+
+  .progress{list-style:none;margin:14px 0 0;padding:0;font-size:14px}
+  .progress li{padding:3px 0;color:var(--ink-soft);display:flex;gap:8px;align-items:baseline}
+  .progress .ico{font-size:15px;width:20px;flex:none}
+  .progress li.done{color:var(--ink)}
+  .progress li.failed{color:var(--quiet)}
+  .progress .detail{color:var(--quiet);font-size:13px}
+
+  .handoff{margin:18px 0 0;padding-top:14px;border-top:1px dashed var(--rule)}
+  .handoff .note{margin:0 0 10px}
+  .handoff-buttons{display:flex;gap:8px;flex-wrap:wrap}
+
+  .tokenbanner{
+    margin:10px 0 14px;padding:11px 14px;
+    border:1px solid var(--signal);border-left-width:4px;border-radius:5px;
+    background:#fff;color:var(--ink);
+    font-size:14px;line-height:1.5;
+  }
+  .tokenbanner strong{color:var(--signal)}
+
+  .condo{
+    margin:10px 0 14px;padding:9px 13px;
+    border:1px solid var(--signal);border-radius:5px;
+    background:#fff;color:var(--signal);
+    font-size:14px;font-weight:500;
+  }
+  .condo .units{font-family:var(--mono);font-size:12px;color:var(--ink-soft);font-weight:400}
+
+  .doclist{list-style:none;margin:8px 0 0;padding:0;font-size:14px}
+  .doclist li{padding:3px 0;border-top:1px solid var(--rule);display:flex;gap:12px;flex-wrap:wrap}
+  .doclist li:first-child{border-top:none}
+  .doclist .d{font-family:var(--mono);font-size:13px;color:var(--ink-soft);flex:none;width:88px}
+  .doclist .t{flex:0 1 auto}
+  .doclist .a{font-family:var(--mono);font-size:13px;color:var(--ink-soft);flex:none}
+  .subhead{font-size:13px;font-weight:600;color:var(--ink-soft);margin:16px 0 0;
+           text-transform:uppercase;letter-spacing:.06em}
+
+  .wip{padding:16px 0 4px}
+  .wip-label{
+    display:inline-block;
+    font-family:var(--mono);font-size:11px;
+    text-transform:uppercase;letter-spacing:.07em;
+    color:var(--warn);
+    border:1px dashed var(--rule);border-radius:4px;
+    padding:3px 8px;margin-bottom:9px;
+  }
+  .wip p{margin:0;font-size:14px;color:var(--quiet);max-width:62ch}
+
+  .kv{display:grid;grid-template-columns:max-content 1fr;gap:9px 18px;margin:14px 0 4px}
+  .kv dt{font-weight:600;font-size:13px;color:var(--ink-soft)}
+  .kv dd{margin:0;font-size:15px}
+  .kv dd.code{font-family:var(--mono);font-size:14px}
+  .kv dd.empty{color:var(--quiet);font-size:14px}
+
+  /* Stacked rather than three columns: the topics string is far longer
+     than the counts and used to wrap into a narrow column, orphaning the
+     tail of it under nothing. */
+  .src{
+    padding:11px 0 12px;
+    border-top:1px solid var(--rule);
+    font-size:15px;
+  }
+  .src:first-child{border-top:none}
+  .src .name{
+    display:block;
+    font-weight:600;font-size:16px;letter-spacing:-0.01em;
+    color:var(--ink);margin-bottom:3px;
+  }
+  .src .num{display:block;font-family:var(--mono);font-size:14px}
+  .src .topics{display:block;color:var(--ink-soft);font-size:14px;margin-top:3px}
+  .n-open{color:var(--signal);font-weight:600}
+  .n-none{color:var(--ok)}
+  .n-fail{color:var(--quiet)}
+  .warn-icon{font-size:16px;margin-right:5px;vertical-align:-2px}
+  .unresolved{
+    font-size:15px;color:var(--signal);
+    border-top:1px solid var(--rule);padding-top:10px;
+  }
+  .unresolved code{font-family:var(--mono);font-size:13px;color:var(--ink-soft)}
+  .flags{font-family:var(--mono);font-size:12px;color:var(--quiet);margin-top:10px}
+
+  .pending{opacity:.55}
+  .spin{
+    display:inline-block;width:11px;height:11px;
+    border:2px solid var(--rule);border-top-color:var(--ink-soft);
+    border-radius:50%;
+    animation:spin .7s linear infinite;
+    vertical-align:-1px;margin-right:7px;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @media (prefers-reduced-motion:reduce){.spin{animation:none}}
+
+  footer{
+    margin-top:20px;
+    font-size:13px;color:var(--quiet);
+    display:flex;
+    flex-direction:column-reverse;
+    align-items:flex-start;
+    gap:24px;
+  }
+  .footer-text{max-width:70ch}
+  .footer-logo{display:none}
+  .footer-logo-wide{width:100%;max-width:340px;height:auto;flex:none}
+  footer p{margin:0 0 8px}
+  footer a{color:var(--ink-soft);text-decoration:underline;text-underline-offset:2px}
+  footer a:hover{color:var(--ink)}
+  #results:empty{display:none}
+  #results:empty + footer{margin-top:20px}
+
+  @media (min-width:760px){
+    footer{flex-direction:row;justify-content:space-between;align-items:flex-end}
+    .footer-logo-wide{display:none}
+    .footer-logo{display:block;width:128px;height:auto;flex:none}
+  }
+
+  @media (max-width:620px){
+    .src .name{font-size:15px}
+    .kv{grid-template-columns:1fr;gap:2px 0}
+    .kv dd{margin-bottom:8px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>AS NYC – Property Research Webtool</h1>
+  <p class="sub">Finds important data for any address in the five boroughs.</p>
+</header>
+
+<div class="panel">
+  <div class="row">
+    <div>
+      <label for="addr">Address or BBL</label>
+      <textarea id="addr" rows="1" spellcheck="false" autocomplete="off"
+                placeholder="20 West 34th Street, New York"></textarea>
+    </div>
+    <button class="go" id="go">Look up</button>
+  </div>
+  <p class="hint">BBL search is fastest. For address search, add in the borough if you know it.<br>
+  You can look up multiple properties at once.<br>Add a new line with Shift+Enter or hit Enter to start the search.</p>
+</div>
+
+<div class="bar" id="bar" hidden>
+  <span class="count" id="count"></span>
+  <a class="dl" id="download" href="#" download="violations.csv" hidden>Download CSV</a>
+</div>
+
+<div id="results"></div>
+
+<footer>
+  <div class="footer-text">
+    <p>Socrata Database Sources: HPD violations (wvxf-dwi5), HPD complaints (ygpa-z7cr), DOB violations (3h2n-5cm9), DOB ECB violations (6bgk-3dad), OATH hearings (jz4z-kudi), HPD registrations (tesw-yqqr, feu5-w2e2), tax lien sale lists (9rz4-mjek), ACRIS legals (8h5j-fqxa), ACRIS master (bnx9-e6tj), ACRIS parties (636b-3b5g), ACRIS document codes (7isb-wh4c). <br>Addresses are resolved to a borough, block, and lot through NYC GeoSearch.</p>
+    <p>Made by <a href="https://rezonator.digital" target="_blank" rel="noopener">Brant Goodman</a> for <a href="https://auctionstoppers.nyc" target="_blank" rel="noopener">Auction Stoppers NYC.</a></p>
+  </div>
+  <img class="footer-logo-wide" src="logo_b.png" alt="Auction Stoppers NYC">
+  <img class="footer-logo" src="logomark_b.png" alt="Auction Stoppers NYC">
+</footer>
+
+</div>
+
+<script>
+"use strict";
+
+const SOCRATA = "https://data.cityofnewyork.us/resource";
+const GEOSEARCH = "https://geosearch.planninglabs.nyc/v2/search";
+const DS = {
+  hpd:  SOCRATA + "/wvxf-dwi5.json",
+  dob:  SOCRATA + "/3h2n-5cm9.json",
+  ecb:  SOCRATA + "/6bgk-3dad.json",
+  oath: SOCRATA + "/jz4z-kudi.json",
+  reg:  SOCRATA + "/tesw-yqqr.json",
+  contacts: SOCRATA + "/feu5-w2e2.json",
+  liens: SOCRATA + "/9rz4-mjek.json",
+  legals: SOCRATA + "/8h5j-fqxa.json",
+  master: SOCRATA + "/bnx9-e6tj.json",
+  parties: SOCRATA + "/636b-3b5g.json",
+  doccodes: SOCRATA + "/7isb-wh4c.json",
+  complaints: SOCRATA + "/ygpa-z7cr.json"
+};
+
+/* Socrata app tokens are meant to be sent openly; this one is visible in
+   the page source by necessity. It raises the rate limit, nothing more.
+   Without it, chained ACRIS calls get 503s from throttling. */
+const APP_TOKEN = "bpbnxgN9Gi7sOrD2f7Lr8RvIK";
+
+const ACRIS_WEB = "https://a836-acris.nyc.gov/CP/";
+const COURT_WEB = "https://iapps.courts.state.ny.us/nyscef/CaseSearch?TAB=name";
+const HPD_WEB   = "https://hpdonline.nyc.gov/hpdonline/";
+const DOB_WEB   = "https://a810-bisweb.nyc.gov/bisweb/bispi00.jsp";
+/* OATH has no working public search page. The Summons Finder at
+   a820-ecbticketfinder.nyc.gov does not load, so the OATH row carries no
+   link rather than a button that goes nowhere. */
+const PAGE = 5000;
+
+/* The DOF Property Tax Public Access portal is session-bound: a property's
+   URL inside it is a position in a server-side result set and dies outside
+   that session. So the Taxes panel links to the front door and shows the
+   three numbers to paste into its BBL search. */
+const TAX_PORTAL = "https://a836-pts-access.nyc.gov/care/search/commonsearch.aspx?mode=persprop";
+
+const BORO_CODE_TO_NAME = {"1":"MANHATTAN","2":"BRONX","3":"BROOKLYN","4":"QUEENS","5":"STATEN ISLAND"};
+const BORO_NAME_TO_CODE = {
+  "MANHATTAN":"1","NEW YORK":"1",
+  "BRONX":"2","THE BRONX":"2",
+  "BROOKLYN":"3","KINGS":"3",
+  "QUEENS":"4",
+  "STATEN ISLAND":"5","RICHMOND":"5"
+};
+
+/* ----------------------------------------------------------------- envelope
+
+Every source function returns the same object, matching Vio.py:
+
+  { key, label, category, status, summary, records }
+
+status is "ok" | "zero" | "unresolved" | "error:<why>".
+summary and records hold only JSON-safe values: strings, numbers, booleans,
+null, arrays, plain objects. No Map, no Set. The Python side follows the same
+rule, which is what lets the two stay in step.
+
+category is what the result card groups by, so a source can move between
+tabs without the render layer needing to know its name.
+-------------------------------------------------------------------------- */
+
+const SOURCE_META = {
+  owner: ["Owner", "ownership"],
+  hpd:   ["HPD",   "violations"],
+  dob:   ["DOB",   "violations"],
+  ecb:   ["ECB",   "violations"],
+  oath:  ["OATH",  "violations"],
+  taxes: ["Taxes", "taxes"],
+  transfers: ["Records", "transfers"],
+  complaints: ["Complaints", "violations"]
+};
+
+const SOURCE_ORDER = ["owner","hpd","dob","ecb","oath","taxes","transfers","complaints"];
+
+function source(key, status, summary, records){
+  const meta = SOURCE_META[key];
+  return {
+    key: key,
+    label: meta[0],
+    category: meta[1],
+    status: status,
+    summary: summary || {},
+    records: records || []
+  };
+}
+
+function blankSource(key, status){
+  return source(key, status, {}, []);
+}
+
+/* The categories the result card shows, in order. built:false renders a
+   placeholder panel instead of content. */
+/* Ordered by when the data lands. Violations and Taxes come back in wave
+   one; Ownership and Transfers wait on ACRIS; Court Docs never loads at all
+   and so costs nothing at the end. */
+const CATEGORIES = [
+  {key:"violations", label:"Violations", built:true, wave:1},
+  {key:"taxes",      label:"Taxes",      built:true, wave:1},
+  {key:"ownership",  label:"Ownership",  built:true, wave:2},
+  {key:"transfers",  label:"Records",    built:true, wave:2},
+  {key:"courtdocs",  label:"Court Docs", built:true, wave:2}
+];
+
+/* Which sources have to land before a tab can render. */
+const CATEGORY_SOURCES = {
+  violations: ["hpd","dob","ecb","oath","complaints"],
+  taxes:      ["taxes"],
+  ownership:  ["owner","transfers"],
+  transfers:  ["transfers"],
+  courtdocs:  ["owner","transfers"]
+};
+
+/* ---------------------------------------------------------------- topics */
+
+const TOPICS = [
+  ["heat/hot water", ["HOT WATER","HEAT"]],
+  ["window guards", ["WINDOW GUARD"]],
+  ["lead paint", ["LEAD-BASED","LEAD BASED","LEAD PAINT","LEAD "]],
+  ["mold", ["MOLD","MILDEW"]],
+  ["pests", ["MICE","MOUSE","RAT ","RATS","ROACH","RODENT","VERMIN","BEDBUG","BED BUG","INSECT","HARBORAGE"]],
+  ["smoke/CO detectors", ["SMOKE DETECT","CARBON MONOXIDE","SMOKE ALARM"]],
+  ["leaks/water damage", ["LEAK","WATER DAMAGE","DAMP","WET "]],
+  ["plaster/paint", ["PLASTER","PAINT","SURFACE"]],
+  ["plumbing/fixtures", ["PLUMB","TOILET","SINK","BATHTUB","FAUCET","DRAIN","WATER CLOSET","WASTE LINE"]],
+  ["electrical", ["ELECTRIC","WIRING","OUTLET","LIGHT FIXTURE"]],
+  ["boiler/elevator", ["BOILER","ELEVATOR"]],
+  ["fire safety/egress", ["FIRE","EGRESS","EXIT","SPRINKLER","EXTINGUISH","SELF-CLOSING","SELF CLOSING"]],
+  ["doors/locks/windows", ["DOOR","LOCK","WINDOW","SASH","GLASS"]],
+  ["structural/facade", ["STRUCTUR","FACADE","ROOF","STAIR","FLOOR","JOIST","BEAM","FOUNDATION","RETAINING","SIDEWALK","SCAFFOLD","SHED"]],
+  ["permits/occupancy", ["PERMIT","CERTIFICATE OF OCCUPANCY","OCCUPANCY","ILLEGAL","WORK WITHOUT"]],
+  ["garbage/sanitation", ["GARBAGE","REFUSE","TRASH","RUBBISH","DIRT","SANIT","DEBRIS","LITTER"]],
+  ["registration/signage", ["REGISTER","REGISTRATION","POST","SIGN"]]
+];
+
+function topicOf(text){
+  const up = (text || "").toUpperCase();
+  for(const [name, keys] of TOPICS){
+    for(const k of keys){ if(up.includes(k)) return name; }
+  }
+  return "other";
+}
+
+/* Tally strings into [{name, count}], most common first. The Map stays inside
+   this function; only plain arrays and objects get returned. */
+function counted(values, top){
+  if(!values || !values.length) return [];
+  const c = new Map();
+  for(const v of values){
+    if(!v) continue;
+    c.set(v, (c.get(v) || 0) + 1);
+  }
+  let pairs = [...c.entries()].sort((a,b) => b[1] - a[1]);
+  if(top) pairs = pairs.slice(0, top);
+  return pairs.map(([name, count]) => ({name: name, count: count}));
+}
+
+function topicSummary(list, top){
+  return counted((list || []).map(topicOf), top || 4);
+}
+
+function topicsText(topics){
+  return (topics || []).map(t => t.name + " (" + t.count + ")").join(", ");
+}
+
+function agenciesText(list){
+  return (list || []).map(a => a.name + " (" + a.count + ")").join("; ");
+}
+
+/* ---------------------------------------------------------------- HTTP */
+
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+async function getJSON(url, params, tries){
+  tries = tries || 3;
+  const qs = new URLSearchParams(params).toString();
+  let last = null;
+  for(let attempt = 0; attempt < tries; attempt++){
+    let r;
+    try{
+      const h = {"Accept":"application/json"};
+      if(url.indexOf("data.cityofnewyork.us") !== -1) h["X-App-Token"] = APP_TOKEN;
+      r = await fetch(url + "?" + qs, {headers:h});
+    }catch(e){
+      last = "network";
+      await sleep(600 * (attempt + 1));
+      continue;
+    }
+    if(r.ok){
+      try{ return [await r.json(), null]; }
+      catch(e){ return [null, "bad_json"]; }
+    }
+    if(r.status === 403) return [null, "http_403_token_rejected"];
+    if(r.status === 429 || r.status >= 500){
+      last = r.status === 429 ? "http_429_rate_limited" : "http_" + r.status;
+      await sleep(900 * (attempt + 1));
+      continue;
+    }
+    return [null, "http_" + r.status];
+  }
+  return [null, last || "unknown"];
+}
+
+async function fetchRows(url, where, order){
+  const rows = [];
+  let offset = 0;
+  for(;;){
+    const params = {"$where": where, "$limit": PAGE, "$offset": offset};
+    if(order) params["$order"] = order;
+    const [data, err] = await getJSON(url, params);
+    if(err) return [rows, err];
+    rows.push(...data);
+    if(data.length < PAGE) return [rows, null];
+    offset += PAGE;
+  }
+}
+
+/* ---------------------------------------------------------------- resolve */
+
+function parseBBL(s){
+  const d = String(s || "").replace(/\D/g, "");
+  if(d.length !== 10) return null;
+  return {boro: d[0], block: d.slice(1,6), lot: d.slice(6,10), bbl: d};
+}
+
+function parseInputAddress(text){
+  const t = String(text || "").trim();
+  const m = t.match(/^\s*(\d+[A-Za-z]?(?:-\d+)?)/);
+  const house = m ? m[1].toUpperCase() : null;
+  const up = t.toUpperCase();
+  let boro = null;
+  for(const name of Object.keys(BORO_NAME_TO_CODE)){
+    const re = new RegExp("\\b" + name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b");
+    if(re.test(up)){ boro = BORO_NAME_TO_CODE[name]; break; }
+  }
+  return [house, boro];
+}
+
+async function geosearch(address){
+  const [data, err] = await getJSON(GEOSEARCH, {text: address});
+  if(err) return [null, "geosearch_" + err];
+  const feats = (data && data.features) || [];
+  if(!feats.length) return [null, "geosearch_no_match"];
+  const p = feats[0].properties || {};
+  const pad = (p.addendum && p.addendum.pad) || {};
+  const bbl = parseBBL(pad.bbl);
+  if(!bbl) return [null, "geosearch_no_bbl"];
+
+  const [inHouse, inBoro] = parseInputAddress(address);
+  const outHouse = String(p.housenumber || "").toUpperCase();
+  if(inHouse && outHouse && inHouse !== outHouse){
+    return [null, "geosearch_housenumber_mismatch:" + inHouse + "\u2192" + outHouse];
+  }
+  const outBoro = BORO_NAME_TO_CODE[String(p.borough || "").toUpperCase()];
+  if(inBoro && outBoro && inBoro !== outBoro){
+    return [null, "geosearch_borough_mismatch:" + BORO_CODE_TO_NAME[inBoro] + "\u2192" + BORO_CODE_TO_NAME[outBoro]];
+  }
+  bbl.label = p.label || "";
+  return [bbl, null];
+}
+
+async function resolve(input){
+  const asBBL = parseBBL(input);
+  if(asBBL && /^[\d\s\-]+$/.test(input)){
+    asBBL.label = "BBL " + asBBL.boro + "-" + asBBL.block + "-" + asBBL.lot;
+    return [asBBL, "given_bbl"];
+  }
+  const [loc, reason] = await geosearch(input);
+  return loc ? [loc, "geosearch"] : [null, reason];
+}
+
+/* ---------------------------------------------------------------- sources */
+
+function blocklotWhere(loc, boroField, blockField, lotField, boroValue){
+  const b = loc.block, l = loc.lot;
+  const blocks = [...new Set([b, b.padStart(5,"0"), b.replace(/^0+/,"") || "0"])];
+  const lots   = [...new Set([l, l.padStart(5,"0"), l.padStart(4,"0"), l.replace(/^0+/,"") || "0"])];
+  const bset = blocks.map(x => "'" + x + "'").join(",");
+  const lset = lots.map(x => "'" + x + "'").join(",");
+  return boroField + "='" + boroValue + "' AND " + blockField + " IN(" + bset + ") AND " + lotField + " IN(" + lset + ")";
+}
+
+async function qHPD(loc){
+  const [rows, err] = await fetchRows(DS.hpd, "bbl='" + loc.bbl + "'", "violationid");
+  if(err && !rows.length) return blankSource("hpd", "error:" + err);
+  const opens = rows.filter(r => String(r.violationstatus || "").trim().toLowerCase() === "open");
+  const byClass = {};
+  for(const r of opens){
+    const c = String(r.class || "?").trim();
+    byClass[c] = (byClass[c] || 0) + 1;
+  }
+  return source("hpd", rows.length ? "ok" : "zero", {
+    open: opens.length,
+    total: rows.length,
+    by_class: byClass,
+    topics: topicSummary(opens.map(r => r.novdescription)),
+    variant: null
+  });
+}
+
+async function qDOB(loc){
+  const where = blocklotWhere(loc, "boro", "block", "lot", loc.boro);
+  const [rows, err] = await fetchRows(DS.dob, where, "isn_dob_bis_viol");
+  if(err && !rows.length) return blankSource("dob", "error:" + err);
+  const active = rows.filter(r => String(r.violation_category || "").toUpperCase().includes("ACTIVE"));
+  return source("dob", rows.length ? "ok" : "zero", {
+    active: active.length,
+    total: rows.length,
+    topics: topicSummary(active.map(r => r.description || r.violation_type || "")),
+    variant: null
+  });
+}
+
+async function qECB(loc){
+  const where = blocklotWhere(loc, "boro", "block", "lot", loc.boro);
+  const [rows, err] = await fetchRows(DS.ecb, where, "isn_dob_bis_extract");
+  if(err && !rows.length) return blankSource("ecb", "error:" + err);
+  const active = rows.filter(r => String(r.ecb_violation_status || "").trim().toUpperCase() === "ACTIVE");
+  return source("ecb", rows.length ? "ok" : "zero", {
+    active: active.length,
+    total: rows.length,
+    topics: topicSummary(active.map(r => r.violation_description || r.section_law_description1 || "")),
+    variant: null
+  });
+}
+
+async function qOATH(loc){
+  const boroName = BORO_CODE_TO_NAME[loc.boro];
+  const where = blocklotWhere(loc, "violation_location_borough", "violation_location_block_no", "violation_location_lot_no", boroName);
+  const [rows, err] = await fetchRows(DS.oath, where, "ticket_number");
+  if(err && !rows.length) return blankSource("oath", "error:" + err);
+
+  const isDOB = r => String(r.issuing_agency || "").toUpperCase().includes("BUILDING");
+  const isOpen = r => {
+    const comp = String(r.compliance_status || "").trim().toUpperCase();
+    const hear = String(r.hearing_status || "").trim().toUpperCase();
+    if(comp === "ALL TERMS MET") return false;
+    if(["PAID IN FULL","DISMISSED","WRITTEN OFF"].includes(hear)) return false;
+    return true;
+  };
+
+  const opens = rows.filter(isOpen);
+  const otherRows = rows.filter(r => !isDOB(r)).map(r => String(r.issuing_agency || "?").trim());
+  return source("oath", rows.length ? "ok" : "zero", {
+    open: opens.length,
+    total: rows.length,
+    dob_related: rows.filter(isDOB).length,
+    other_agencies: counted(otherRows, 3),
+    topics: topicSummary(opens.map(r => r.charge_1_code_description || "")),
+    variant: null
+  });
+}
+
+/* HPD Online's "Complaints, last 2 years" card is a PROBLEM count, not a
+   complaint count, despite the label. Verified: 375 Gates Avenue shows 82
+   there, and count(*) over two years returns exactly 82 while
+   count(distinct complaint_id) returns 32. Match their number or Elana
+   will think the tool is broken; show the distinct count beside it because
+   the ratio is the more useful signal. */
+function twoYearsAgo(){
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - 2);
+  return d.toISOString().slice(0, 19);
+}
+
+async function qComplaints(loc){
+  const where = "bbl='" + loc.bbl + "' AND received_date > '" + twoYearsAgo() + "'";
+  const [a, e1] = await getJSON(DS.complaints, {"$select": "count(*) as n", "$where": where});
+  if(e1) return blankSource("complaints", "error:" + e1);
+  const problems = Number((a && a[0] && a[0].n) || 0);
+
+  let calls = null;
+  const [b, e2] = await getJSON(DS.complaints, {"$select": "count(distinct complaint_id) as n", "$where": where});
+  if(!e2 && b && b[0]) calls = Number(b[0].n);
+
+  return source("complaints", problems ? "ok" : "zero", {
+    problems: problems,
+    calls: calls,
+    years: 2
+  });
+}
+
+async function qOwner(loc){
+  const none = () => source("owner", "zero", {registered:"", role:""});
+  const [regs, e1] = await getJSON(DS.reg, {"$where":"bbl='" + loc.bbl + "'", "$order":"lastregistrationdate DESC", "$limit":1});
+  if(e1 || !regs || !regs.length) return none();
+  const regId = regs[0].registrationid;
+  if(!regId) return none();
+  const [contacts, e2] = await getJSON(DS.contacts, {"$where":"registrationid='" + regId + "'", "$limit":50});
+  if(e2 || !contacts || !contacts.length) return none();
+
+  const byType = {};
+  for(const c of contacts){
+    const t = String(c.type || "").toUpperCase().replace(/\s+/g,"");
+    const name = [c.firstname, c.lastname].filter(Boolean).join(" ").trim() || String(c.corporationname || "").trim();
+    if(name && !byType[t]) byType[t] = name;
+  }
+  let chosenType = "", chosenName = "";
+  for(const t of ["INDIVIDUALOWNER","CORPORATEOWNER","HEADOFFICER","AGENT"]){
+    if(byType[t]){ chosenType = t; chosenName = byType[t]; break; }
+  }
+  if(!chosenName){
+    const keys = Object.keys(byType);
+    if(keys.length){ chosenType = keys[0]; chosenName = byType[keys[0]]; }
+  }
+  if(!chosenName) return none();
+  return source("owner", "ok", {
+    registered: chosenName,
+    role: chosenType.charAt(0) + chosenType.slice(1).toLowerCase()
+  });
+}
+
+/* Owner has two possible sources and they mean different things. HPD
+   registration is required of rental buildings, so an owner-occupied house
+   often has none. The deed says who took title, which for a small house is
+   more likely to be the actual owner, but a 2005 deed name is who bought it
+   in 2005 and nothing more. Whichever is used, say which. */
+function ownerChain(result){
+  const srcs = result.sources || {};
+  const reg = ((srcs.owner || {}).summary || {}).registered || "";
+  const regRole = ((srcs.owner || {}).summary || {}).role || "";
+  const tsum = (srcs.transfers || {}).summary || {};
+  const deed = tsum.deed || null;
+  const deedNames = party2Names(tsum.deed_parties);
+
+  const out = {registered: reg, role: regRole, deed_names: deedNames, deed: deed,
+               name: "", provenance: ""};
+  if(reg){
+    out.name = reg;
+    out.provenance = "HPD registration";
+  }else if(deedNames.length){
+    out.name = deedNames.join("; ");
+    out.provenance = "Deed recorded " + (monthLabel(deed && deed.recorded) || (deed && deed.recorded) || "");
+  }
+  return out;
+}
+
+function ownerText(src){
+  const s = (src && src.summary) || {};
+  if(!s.registered) return "";
+  return s.role ? s.registered + " (" + s.role + ")" : s.registered;
+}
+
+/* ---------------------------------------------------------------- taxes */
+
+/* Ladder: 90 -> 60 -> 30 -> 10 -> Final Sale. Higher stage is worse.
+   The city records every level two ways, "90 Day Notice" and "90 Days
+   Notice", so rank on the leading number rather than the string. */
+const CYCLE_STAGES = {90:1, 60:2, 30:3, 10:4};
+const CYCLE_MAX = 5;
+
+function normalizeCycle(raw){
+  const text = String(raw || "").trim();
+  if(!text) return {stage:0, label:"", terminal:false};
+  if(text.toLowerCase().includes("final")){
+    return {stage:CYCLE_MAX, label:"Final Sale", terminal:true};
+  }
+  const m = text.match(/\d+/);
+  if(m){
+    const days = parseInt(m[0], 10);
+    const stage = CYCLE_STAGES[days];
+    if(stage) return {stage:stage, label:days + " Day Notice", terminal:false};
+  }
+  return {stage:0, label:text, terminal:false};
+}
+
+/* This dataset has no bbl column. It keys on borough, block and lot as
+   separate strings, borough numeric ("3"), block and lot unpadded
+   ("1807", "75"). GeoSearch returns them padded, so match both forms. */
+function liensWhere(loc){
+  const pad = (v, widths) => {
+    const out = new Set([v, v.replace(/^0+/,"") || "0"]);
+    for(const w of widths) out.add(v.padStart(w, "0"));
+    return [...out].sort();
+  };
+  const blocks = pad(loc.block, [5]).map(x => "'" + x + "'").join(",");
+  const lots   = pad(loc.lot, [4,5]).map(x => "'" + x + "'").join(",");
+  return "borough='" + loc.boro + "' AND block IN(" + blocks + ") AND lot IN(" + lots + ")";
+}
+
+function cleanNotice(r){
+  return {
+    month: r.month || "",
+    cycle: r.cycle || "",
+    water_debt_only: String(r.water_debt_only || "").toUpperCase() === "YES",
+    house_number: r.house_number || "",
+    street_name: r.street_name || "",
+    tax_class_code: r.tax_class_code || "",
+    building_class: r.building_class || ""
+  };
+}
+
+async function qTaxes(loc){
+  const [rows, err] = await getJSON(DS.liens, {"$where": liensWhere(loc), "$limit": 200});
+  if(err) return blankSource("taxes", "error:" + err);
+  if(!rows || !rows.length){
+    return source("taxes", "zero", {
+      on_lien_list: false,
+      notice_count: 0,
+      stage: 0,
+      stage_max: CYCLE_MAX,
+      terminal: false,
+      cycle: "",
+      cycle_raw: "",
+      latest_month: "",
+      water_debt_only: null,
+      portal: TAX_PORTAL
+    });
+  }
+  const notices = rows.map(cleanNotice).sort((a,b) => (a.month < b.month) ? 1 : (a.month > b.month) ? -1 : 0);
+  const latest = notices[0];
+  const cyc = normalizeCycle(latest.cycle);
+  return source("taxes", "ok", {
+    on_lien_list: true,
+    notice_count: notices.length,
+    cycle: cyc.label || latest.cycle,
+    cycle_raw: latest.cycle,
+    stage: cyc.stage,
+    stage_max: CYCLE_MAX,
+    terminal: cyc.terminal,
+    latest_month: latest.month,
+    water_debt_only: latest.water_debt_only,
+    portal: TAX_PORTAL
+  }, notices);
+}
+
+function monthLabel(iso){
+  if(!iso || iso.length < 7) return iso || "";
+  const names = ["January","February","March","April","May","June",
+                 "July","August","September","October","November","December"];
+  const y = parseInt(iso.slice(0,4), 10), m = parseInt(iso.slice(5,7), 10);
+  if(isNaN(y) || isNaN(m) || m < 1 || m > 12) return iso;
+  return names[m-1] + " " + y;
+}
+
+/* ---------------------------------------------------------------- ACRIS
+
+Three datasets, queried in order. Legals says which documents belong to a
+lot; Master says what each one is and when it was recorded; Parties says who
+is named on it. That split is the city's.
+
+Known limit, established by hand against the ACRIS website: the Open Data
+mirror is not a complete copy. On the test lot the site showed 27 documents
+and Open Data returned 23. No pattern to the gap. Anything that matters
+should be verified on ACRIS itself, which is why the panel links out.
+-------------------------------------------------------------------------- */
+
+const TRANSFER_DEEDS = ["DEED","DEEDO","DEED, LE","DEED, TS","DEED, RC","TODD","IDED"];
+const CORRECTION_DEEDS = ["CORRD","DEED COR","CONDEED","CORR, LE","DEEDP","SI CORR"];
+/* M&CON is MORTGAGE AND CONSOLIDATION, a mortgage instrument, not an
+   ampersand spelling of memorandum of contract. Verified against the
+   Document Control Codes table. */
+const CONTRACT_CODES = ["CNTR","MCON","ACON"];
+const COURT_ORDER_CODES = ["CTOR","DCTO"];
+const EASEMENT_CODES = ["EASE"];
+const TAX_LIEN_CODES = ["TLS","ATL","AMTL"];
+const MASTER_CHUNK = 100;
+
+function legalsWhere(loc){
+  const pad = (v, widths) => {
+    const out = new Set([v, v.replace(/^0+/,"") || "0"]);
+    for(const w of widths) out.add(v.padStart(w, "0"));
+    return [...out].sort();
+  };
+  const blocks = pad(loc.block, [5]).map(x => "'" + x + "'").join(",");
+  const lots   = pad(loc.lot, [4,5]).map(x => "'" + x + "'").join(",");
+  return "borough='" + loc.boro + "' AND block IN(" + blocks + ") AND lot IN(" + lots + ")";
+}
+
+let DOC_NAMES = null;
+async function docTypeNames(){
+  if(DOC_NAMES) return DOC_NAMES;
+  const [rows, err] = await getJSON(DS.doccodes, {"$limit": 500});
+  DOC_NAMES = {};
+  if(!err && rows){
+    for(const r of rows) DOC_NAMES[r.doc__type] = (r.doc__type_description || "").trim();
+  }
+  return DOC_NAMES;
+}
+
+function cleanDoc(r, names){
+  const dt = (r.doc_type || "").trim();
+  return {
+    document_id: (r.document_id || "").trim(),
+    crfn: (r.crfn || "").trim(),
+    doc_type: dt,
+    doc_type_name: names[dt] || dt,
+    recorded: (r.recorded_datetime || "").slice(0,10),
+    signed: (r.document_date || "").slice(0,10),
+    amount: (r.document_amt || "").trim()
+  };
+}
+
+async function fetchMaster(ids, names){
+  const out = [];
+  for(let i = 0; i < ids.length; i += MASTER_CHUNK){
+    const chunk = ids.slice(i, i + MASTER_CHUNK).map(d => "'" + d + "'").join(",");
+    const [rows, err] = await fetchRows(DS.master, "document_id IN(" + chunk + ")", null);
+    if(!err || rows.length) out.push(...rows.map(r => cleanDoc(r, names)));
+  }
+  return out;
+}
+
+async function fetchParties(docId){
+  const [rows, err] = await getJSON(DS.parties, {"$where": "document_id='" + docId + "'", "$limit": 200});
+  if(err || !rows) return [];
+  return rows.map(r => ({
+    party_type: String(r.party_type || "").trim(),
+    name: (r.name || "").trim()
+  })).filter(p => p.name);
+}
+
+function money(v){
+  const n = Number(v);
+  if(!isFinite(n) || n <= 0) return "";
+  return "$" + n.toLocaleString("en-US", {maximumFractionDigits:0});
+}
+
+async function qTransfers(loc, note){
+  const step = t => { if(note) note("transfers", "open", t); };
+
+  step("finding documents on this lot");
+  const [legalRows, e1] = await fetchRows(DS.legals, legalsWhere(loc), "document_id");
+  if(e1 && !legalRows.length) return blankSource("transfers", "error:" + e1);
+
+  const units = [...new Set(legalRows.map(r => (r.unit || "").trim()).filter(Boolean))].sort();
+  const ids = [...new Set(legalRows.map(r => (r.document_id || "").trim()).filter(Boolean))].sort();
+
+  const base = {
+    doc_count: ids.length,
+    is_condo: units.length > 0,
+    unit_count: units.length,
+    units: units.slice(0, 40),
+    deed: null,
+    deed_parties: [],
+    contracts: [],
+    court_orders: [],
+    easements: [],
+    tax_liens: [],
+    by_type: {},
+    correction_count: 0,
+    acris: ACRIS_WEB
+  };
+
+  if(!ids.length) return source("transfers", "zero", base);
+
+  step("reading document types");
+  const names = await docTypeNames();
+  const docs = await fetchMaster(ids, names);
+  if(!docs.length) return source("transfers", "zero", base);
+
+  docs.sort((a,b) => (a.recorded < b.recorded) ? 1 : (a.recorded > b.recorded) ? -1 : 0);
+  const has = (d, list) => list.indexOf(d.doc_type) !== -1;
+
+  base.doc_count = docs.length;
+  base.contracts = docs.filter(d => has(d, CONTRACT_CODES));
+  base.court_orders = docs.filter(d => has(d, COURT_ORDER_CODES));
+  base.easements = docs.filter(d => has(d, EASEMENT_CODES));
+  base.tax_liens = docs.filter(d => has(d, TAX_LIEN_CODES));
+  base.correction_count = docs.filter(d => has(d, CORRECTION_DEEDS)).length;
+  for(const d of docs) base.by_type[d.doc_type_name] = (base.by_type[d.doc_type_name] || 0) + 1;
+
+  const deeds = docs.filter(d => has(d, TRANSFER_DEEDS));
+  base.deed = deeds.length ? deeds[0] : null;
+
+  if(base.deed){
+    step("reading names on the most recent deed");
+    const parties = await fetchParties(base.deed.document_id);
+    base.deed_parties = parties;
+  }
+
+  return source("transfers", "ok", base, docs);
+}
+
+function party2Names(parties){
+  return (parties || []).filter(p => p.party_type === "2").map(p => p.name);
+}
+
+/* ---------------------------------------------------------------- one property */
+
+const QUERIES = [["owner", qOwner], ["hpd", qHPD], ["dob", qDOB], ["ecb", qECB], ["oath", qOATH], ["taxes", qTaxes], ["transfers", qTransfers]];
+
+const ICON = {open:"\u2611\uFE0F", done:"\u2705", failed:"\u274C"};
+
+/* Wave one is five single calls. Wave two is ACRIS, which fires four
+   rounds of its own against the same host; running it alongside the others
+   starves them, because browsers cap concurrent connections per host at
+   about six. */
+const WAVE_ONE = [["hpd", qHPD], ["dob", qDOB], ["ecb", qECB], ["oath", qOATH], ["taxes", qTaxes], ["complaints", qComplaints]];
+const WAVE_TWO = [["transfers", qTransfers], ["owner", qOwner]];
+
+async function check(input, note){
+  const result = {
+    input: input,
+    resolve: {status:"", label:"", bbl:"", boro:"", block:"", lot:""},
+    sources: {},
+    flags: []
+  };
+
+  const tick = (k, state, detail) => { if(note) note(k, state, detail); };
+
+  tick("resolve", "open");
+  let loc, how;
+  try{
+    [loc, how] = await resolve(input);
+  }catch(e){
+    loc = null; how = "resolve_crash";
+  }
+  if(!loc){
+    tick("resolve", "failed");
+    result.resolve.status = "unresolved:" + how;
+    for(const key of SOURCE_ORDER) result.sources[key] = blankSource(key, "unresolved");
+    return result;
+  }
+  tick("resolve", "done");
+
+  result.resolve.status = how;
+  result.resolve.label = loc.label || "";
+  result.resolve.bbl = loc.bbl;
+  result.resolve.boro = loc.boro;
+  result.resolve.block = loc.block;
+  result.resolve.lot = loc.lot;
+
+  const absorb = (src) => {
+    result.sources[src.key] = src;
+    const variant = (src.summary || {}).variant;
+    if(variant !== null && variant !== undefined && variant !== 0){
+      result.flags.push(src.key + "_join_variant=" + variant);
+    }
+  };
+
+  const runWave = async (wave) => {
+    const settled = await Promise.all(wave.map(async ([key, fn]) => {
+      let src;
+      try{ src = await fn(loc, note); }
+      catch(e){ src = blankSource(key, "error:exception"); }
+      return src;
+    }));
+    for(const src of settled) absorb(src);
+  };
+
+  await runWave(WAVE_ONE);
+  tick("wave1", "done", result);
+
+  await runWave(WAVE_TWO);
+  tick("wave2", "done", result);
+
+  return result;
+}
+
+/* ---------------------------------------------------------------- flatten */
+
+const FLAT_FIELDS = [
+  "input","resolve_status","resolved_address","bbl","boro","block","lot","owner_registered",
+  "hpd_status","hpd_open","hpd_A","hpd_B","hpd_C","hpd_I","hpd_topics",
+  "dob_status","dob_active","dob_total","dob_topics",
+  "ecb_status","ecb_active","ecb_total","ecb_topics",
+  "oath_status","oath_open_approx","oath_total","oath_dob_related","oath_other_agencies","oath_topics",
+  "tax_status","tax_on_lien_list","tax_cycle","tax_stage","tax_latest_month","tax_water_debt_only","tax_notice_count",
+  "acris_status","acris_doc_count","acris_is_condo","acris_deed_type","acris_deed_recorded","acris_deed_amount",
+  "acris_deed_party2","acris_contracts","acris_court_orders","acris_easements",
+  "owner_name","owner_source",
+  "complaints_status","complaints_2yr","complaint_calls_2yr"
+];
+
+function blankFlat(){
+  const row = {};
+  for(const f of FLAT_FIELDS) row[f] = "";
+  return row;
+}
+
+/* Nested result -> the flat scalar row the CSV writer wants. Fields stay
+   blank when a source produced no summary at all. When a source starts
+   returning records[], this is the one place that decides how a list
+   becomes a cell. */
+function flatten(result){
+  const row = blankFlat();
+  row.input = result.input;
+
+  const res = result.resolve || {};
+  row.resolve_status = res.status || "";
+  row.resolved_address = res.label || "";
+  row.bbl = res.bbl || "";
+  row.boro = res.boro || "";
+  row.block = res.block || "";
+  row.lot = res.lot || "";
+
+  const srcs = result.sources || {};
+  const has = o => o && o.summary && Object.keys(o.summary).length > 0;
+
+  row.owner_registered = ownerText(srcs.owner);
+  const oc = ownerChain(result);
+  row.owner_name = oc.name;
+  row.owner_source = oc.provenance;
+
+  const hpd = srcs.hpd || {};
+  row.hpd_status = hpd.status || "";
+  if(has(hpd)){
+    const s = hpd.summary, bc = s.by_class || {};
+    row.hpd_open = s.open;
+    for(const c of ["A","B","C","I"]) row["hpd_" + c] = bc[c] || 0;
+    row.hpd_topics = topicsText(s.topics);
+  }
+
+  for(const key of ["dob","ecb"]){
+    const src = srcs[key] || {};
+    row[key + "_status"] = src.status || "";
+    if(has(src)){
+      row[key + "_active"] = src.summary.active;
+      row[key + "_total"] = src.summary.total;
+      row[key + "_topics"] = topicsText(src.summary.topics);
+    }
+  }
+
+  const oath = srcs.oath || {};
+  row.oath_status = oath.status || "";
+  if(has(oath)){
+    const s = oath.summary;
+    row.oath_open_approx = s.open;
+    row.oath_total = s.total;
+    row.oath_dob_related = s.dob_related;
+    row.oath_other_agencies = agenciesText(s.other_agencies);
+    row.oath_topics = topicsText(s.topics);
+  }
+
+  const taxes = srcs.taxes || {};
+  row.tax_status = taxes.status || "";
+  if(has(taxes)){
+    const s = taxes.summary;
+    row.tax_on_lien_list = s.on_lien_list ? "yes" : "no";
+    row.tax_cycle = s.cycle || "";
+    row.tax_stage = s.stage || 0;
+    row.tax_latest_month = s.latest_month || "";
+    row.tax_water_debt_only = s.water_debt_only === null ? "" : (s.water_debt_only ? "yes" : "no");
+    row.tax_notice_count = s.notice_count;
+  }
+
+  const cp = srcs.complaints || {};
+  row.complaints_status = cp.status || "";
+  if(has(cp)){
+    row.complaints_2yr = cp.summary.problems;
+    row.complaint_calls_2yr = cp.summary.calls === null ? "" : cp.summary.calls;
+  }
+
+  const tr = srcs.transfers || {};
+  row.acris_status = tr.status || "";
+  if(has(tr)){
+    const s = tr.summary;
+    row.acris_doc_count = s.doc_count;
+    row.acris_is_condo = s.is_condo ? "yes" : "no";
+    row.acris_contracts = (s.contracts || []).length;
+    row.acris_court_orders = (s.court_orders || []).length;
+    row.acris_easements = (s.easements || []).length;
+    if(s.deed){
+      row.acris_deed_type = s.deed.doc_type_name || s.deed.doc_type;
+      row.acris_deed_recorded = s.deed.recorded || "";
+      row.acris_deed_amount = s.deed.amount || "";
+      row.acris_deed_party2 = party2Names(s.deed_parties).join("; ");
+    }
+  }
+  return row;
+}
+
+/* ---------------------------------------------------------------- render */
+
+function esc(s){
+  return String(s === null || s === undefined ? "" : s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;");
+}
+
+function nClass(n){
+  return Number(n) > 0 ? "n-open" : "n-none";
+}
+
+function srcLine(name, status, numHTML, topics){
+  let mid, right;
+  if(String(status).startsWith("error")){
+    mid = '<span class="num n-fail"><span class="warn-icon">\u26A0\uFE0F</span>lookup failed</span>';
+    right = '<span class="topics">' + esc(status) + '</span>';
+  }else if(status === "zero"){
+    mid = '<span class="num n-none">none retrieved</span>';
+    right = "";
+  }else{
+    mid = '<span class="num">' + numHTML + '</span>';
+    right = topics ? '<span class="topics">' + esc(topics) + '</span>' : "";
+  }
+  return '<div class="src"><span class="name">' + esc(name) + '</span>' + mid + right + '</div>';
+}
+
+/* --- panel bodies, one per category --- */
+
+function panelOwnership(result){
+  const src = (result.sources || {}).owner || {};
+  const res = result.resolve || {};
+  const o = ownerChain(result);
+  let html = '<dl class="kv">';
+
+  /* Answer first, provenance second. Leading with an absent HPD
+     registration buried the name that was actually found. */
+  if(o.name){
+    html += '<dt>Apparent owner</dt><dd>' + esc(o.name) + '</dd>';
+    html += '<dt>According to</dt><dd>' + esc(o.provenance) + '</dd>';
+  }else{
+    html += '<dt>Apparent owner</dt><dd class="empty">No name retrieved from HPD registration ' +
+            'or from any recorded deed</dd>';
+  }
+
+  if(String(src.status).startsWith("error")){
+    html += '<dt>HPD registration</dt><dd class="empty">' +
+            '<span class="warn-icon">\u26A0\uFE0F</span>lookup failed</dd>';
+  }else if(o.registered && o.name !== o.registered){
+    html += '<dt>HPD registration</dt><dd>' + esc(o.registered) +
+            (o.role ? ' (' + esc(o.role) + ')' : "") + '</dd>';
+  }else if(!o.registered){
+    html += '<dt>HPD registration</dt><dd class="empty">None retrieved</dd>';
+  }else if(o.role){
+    html += '<dt>Role</dt><dd>' + esc(o.role) + '</dd>';
+  }
+
+  /* Worth showing separately when the registered agent and the person on
+     the deed are different people. */
+  if(o.deed_names.length && o.registered){
+    html += '<dt>Took title</dt><dd>' + esc(o.deed_names.join("; ")) +
+            ', ' + esc(monthLabel(o.deed.recorded) || o.deed.recorded) + '</dd>';
+  }
+
+  html += '<dt>BBL</dt><dd class="code">' + esc(res.boro) + "-" + esc(res.block) + "-" + esc(res.lot) + '</dd>';
+  if(res.label) html += '<dt>Matched</dt><dd>' + esc(res.label) + '</dd>';
+  html += '</dl>';
+  html += handoff("HPD registration is filed by the owner and can be out of date. Deed records come from ACRIS Open Data, which is missing some documents. Confirm at the source:",
+                  [["Open HPD Online", HPD_WEB], ["Open ACRIS", ACRIS_WEB]]);
+  return html;
+}
+
+function panelViolations(result){
+  const srcs = result.sources || {};
+  let html = "";
+
+  const hpd = srcs.hpd || {}, h = hpd.summary || {}, bc = h.by_class || {};
+  const hpdNum = '<span class="' + nClass(h.open) + '">' + h.open + " open</span> \u00b7 A " +
+                 (bc.A || 0) + " / B " + (bc.B || 0) + " / C " + (bc.C || 0) + " / I " + (bc.I || 0);
+  html += srcLine("HPD", hpd.status, hpdNum, topicsText(h.topics));
+
+  const comp = srcs.complaints || {};
+  const c = comp.summary || {};
+  let compNum;
+  if(String(comp.status).startsWith("error")){
+    compNum = "";
+  }else{
+    compNum = '<span class="' + nClass(c.problems) + '">' + (c.problems || 0) +
+              " complaints</span> in " + (c.years || 2) + " years" +
+              (c.calls !== null && c.calls !== undefined ? " \u00b7 " + c.calls + " separate calls" : "");
+  }
+  html += srcLine("Complaints", comp.status, compNum, "");
+
+  for(const [key, label] of [["dob","DOB"],["ecb","ECB"]]){
+    const src = srcs[key] || {}, s = src.summary || {};
+    const num = '<span class="' + nClass(s.active) + '">' + s.active + " active</span> of " + s.total;
+    html += srcLine(label, src.status, num, topicsText(s.topics));
+  }
+
+  const oath = srcs.oath || {}, o = oath.summary || {};
+  const oathNum = '<span class="' + nClass(o.open) + '">' + o.open + " open</span> of " + o.total;
+  let oathRight = topicsText(o.topics);
+  const extra = [];
+  if(o.dob_related !== undefined) extra.push("DOB-related " + o.dob_related);
+  const others = agenciesText(o.other_agencies);
+  if(others) extra.push(others);
+  if(extra.length) oathRight = (oathRight ? oathRight + " \u2014 " : "") + extra.join("; ");
+  html += srcLine("OATH", oath.status, oathNum, oathRight);
+
+  html += handoff("These datasets lag the agency systems, so anything that matters is worth confirming at the source. There is no working public search page for OATH.",
+                  [["HPD Online", HPD_WEB], ["DOB BIS", DOB_WEB]]);
+  return html;
+}
+
+function taxTags(res){
+  const cells = [["Borough", res.boro], ["Block", String(parseInt(res.block,10))], ["Lot", String(parseInt(res.lot,10))]];
+  return '<div class="taglist">' + cells.map(([k,v]) =>
+    '<span class="tag"><span class="tag-k">' + k + '</span><span class="tag-v">' + esc(v) + '</span></span>'
+  ).join("") + '</div>';
+}
+
+function stagePips(stage, max){
+  let out = '<span class="stage-bar" aria-hidden="true">';
+  for(let i = 1; i <= max; i++){
+    out += '<span class="stage-pip' + (i <= stage ? " on" : "") + '"></span>';
+  }
+  return out + '</span>';
+}
+
+function panelTaxes(result){
+  const src = (result.sources || {}).taxes || {};
+  const s = src.summary || {};
+  const res = result.resolve || {};
+  let html = "";
+
+  if(String(src.status).startsWith("error")){
+    html += '<dl class="kv"><dt>Lien list</dt>' +
+            '<dd class="empty"><span class="warn-icon">\u26A0\uFE0F</span>lookup failed</dd></dl>';
+  }else if(!s.on_lien_list){
+    html += '<dl class="kv"><dt>Lien list</dt>' +
+            '<dd><span class="n-none">Not retrieved from the tax lien sale list</span></dd></dl>';
+  }else{
+    const debt = s.water_debt_only ? "Water and sewer only" : "Property tax arrears";
+    html += '<dl class="kv">';
+    html += '<dt>Lien list</dt><dd><span class="n-open">' + esc(s.cycle) + '</span>' +
+            ' <span class="stage-note">stage ' + s.stage + ' of ' + s.stage_max + '</span>' +
+            stagePips(s.stage, s.stage_max) + '</dd>';
+    html += '<dt>Debt</dt><dd>' + debt + '</dd>';
+    html += '<dt>Latest notice</dt><dd>' + esc(monthLabel(s.latest_month)) + '</dd>';
+    if(s.notice_count > 1){
+      const earliest = (src.records || [])[src.records.length - 1] || {};
+      html += '<dt>Notices</dt><dd>' + s.notice_count +
+              (earliest.month ? ', earliest ' + esc(monthLabel(earliest.month)) : "") + '</dd>';
+    }
+    html += '</dl>';
+  }
+
+  /* Liens that already sold are recorded in ACRIS and never appear on the
+     lien sale list, which only covers properties currently facing sale. */
+  const tsrc = (result.sources || {}).transfers || {};
+  const liens = (tsrc.summary || {}).tax_liens || [];
+  if(liens.length){
+    html += '<p class="subhead">Tax liens recorded in ACRIS</p>' + docList(liens);
+  }
+
+  html += handoff("The amount owed is not published as open data. Look it up by BBL:",
+                  [["Open DOF Property Tax Public Access", TAX_PORTAL]]);
+  return html;
+}
+
+function tagBlock(cells){
+  const shown = cells.filter(c => c[1]);
+  if(!shown.length) return "";
+  return '<div class="taglist">' + shown.map(([k,v]) =>
+    '<span class="tag"><span class="tag-k">' + esc(k) + '</span><span class="tag-v">' + esc(v) + '</span></span>'
+  ).join("") + '</div>';
+}
+
+/* Every panel ends with one of these. The tool reports what open data has;
+   the source systems are where anything that matters gets confirmed. */
+function handoff(note, buttons, cells){
+  let html = '<div class="handoff">';
+  if(note) html += '<p class="note">' + esc(note) + '</p>';
+  html += '<div class="handoff-buttons">' + buttons.map(([label,url]) =>
+    '<a class="portal-link" href="' + url + '" target="_blank" rel="noopener">' + esc(label) + '</a>'
+  ).join("") + '</div>';
+  html += tagBlock(cells || []);
+  return html + '</div>';
+}
+
+function bblCells(res){
+  return [["Borough", res.boro], ["Block", String(parseInt(res.block,10) || "")],
+          ["Lot", String(parseInt(res.lot,10) || "")]];
+}
+
+function docList(docs, limit){
+  const rows = (docs || []).slice(0, limit || 12);
+  if(!rows.length) return '<p class="note">None retrieved.</p>';
+  return '<ul class="doclist">' + rows.map(d =>
+    '<li><span class="d">' + esc(d.recorded || "\u2014") + '</span>' +
+    '<span class="t">' + esc(d.doc_type_name || d.doc_type) + '</span>' +
+    (money(d.amount) ? '<span class="a">' + esc(money(d.amount)) + '</span>' : "") +
+    '</li>').join("") + '</ul>';
+}
+
+function panelTransfers(result){
+  const src = (result.sources || {}).transfers || {};
+  const s = src.summary || {};
+  const res = result.resolve || {};
+  let html = "";
+
+  if(String(src.status).startsWith("error")){
+    html += '<dl class="kv"><dt>ACRIS</dt><dd class="empty">' +
+            '<span class="warn-icon">\u26A0\uFE0F</span>lookup failed</dd></dl>';
+  }else if(!s.doc_count){
+    html += '<dl class="kv"><dt>ACRIS</dt><dd class="empty">No documents retrieved for this lot</dd></dl>';
+  }else{
+    const d = s.deed;
+    html += '<dl class="kv">';
+    if(d){
+      const buyers = party2Names(s.deed_parties);
+      html += '<dt>Last transfer</dt><dd>' + esc(d.doc_type_name) +
+              ', recorded ' + esc(monthLabel(d.recorded) || d.recorded) +
+              (money(d.amount) ? ' for ' + esc(money(d.amount)) : "") + '</dd>';
+      html += '<dt>Transferred to</dt><dd>' +
+              (buyers.length ? esc(buyers.join("; ")) : '<span class="empty">no party retrieved</span>') +
+              '</dd>';
+    }else{
+      html += '<dt>Last transfer</dt><dd class="empty">No deed retrieved</dd>';
+    }
+    html += '<dt>Documents</dt><dd>' + s.doc_count + ' recorded' +
+            (s.correction_count ? ' (' + s.correction_count + ' correction deed' +
+             (s.correction_count === 1 ? '' : 's') + ')' : "") + '</dd>';
+    html += '</dl>';
+
+    html += '<p class="subhead">Contracts of sale and memoranda</p>' + docList(s.contracts);
+    html += '<p class="subhead">Court orders</p>' + docList(s.court_orders);
+    html += '<p class="subhead">Easements</p>' + docList(s.easements);
+  }
+
+  html += handoff(
+    "ACRIS Open Data does not carry every document in the ACRIS record, so treat this as partial and search the source directly:",
+    [["Open ACRIS", ACRIS_WEB]]);
+  return html;
+}
+
+/* ACRIS stores people as "LAST, FIRST M" and companies as a single string.
+   NYSCEF wants a last name and a first name in separate boxes, so split on
+   the comma when there is one and leave anything else whole. Splitting
+   unconditionally would mangle "DAN ASSOCIATES LLC" and
+   "ESTATE OF BERNARD AISENBERG". */
+function nameCells(name){
+  const i = name.indexOf(",");
+  if(i === -1) return [["Name", name]];
+  const last = name.slice(0, i).trim();
+  const first = name.slice(i + 1).trim();
+  if(!last || !first) return [["Name", name]];
+  return [["Last name", last], ["First name", first]];
+}
+
+function panelCourtDocs(result){
+  const o = ownerChain(result);
+  let html = '<p class="note">Foreclosure filings go to the County Clerk rather than the City Register, ' +
+             'so they are not in any open dataset. NYSCEF covers electronically filed cases; ' +
+             'older or paper-filed matters will not appear there. Search by party name.</p>';
+
+  let cells = [];
+  if(o.name){
+        cells = [["Name(s)", o.name]];
+    if(o.provenance.indexOf("Deed") === 0){
+      html += '<p class="note">This name is whoever took title, which may not be who holds it now. ' +
+              'A later sale, a death, or a transfer missing from ACRIS Open Data would not show here.</p>';
+    }
+  }else{
+    html += '<dl class="kv"><dt>Apparent owner</dt><dd class="empty">' +
+            'No name retrieved from HPD registration or from any recorded deed, ' +
+            'so there is nothing to search the court index with.</dd></dl>';
+  }
+
+  const note = o.name ? "Name from " + o.provenance.charAt(0).toLowerCase() + o.provenance.slice(1) + ":" : "";
+  html += handoff(note, [["Open court records", COURT_WEB]], cells);
+  return html;
+}
+
+function panelStub(cat){
+  return '<div class="wip"><span class="wip-label">Under construction</span>' +
+         '<p>' + esc(cat.note) + '</p></div>';
+}
+
+function panelBody(cat, result){
+  if(cat.key === "ownership") return panelOwnership(result);
+  if(cat.key === "violations") return panelViolations(result);
+  if(cat.key === "taxes") return panelTaxes(result);
+  if(cat.key === "transfers") return panelTransfers(result);
+  if(cat.key === "courtdocs") return panelCourtDocs(result);
+  return panelStub(cat);
+}
+
+/* --- token trouble --- */
+
+/* A bad or throttled app token fails every Socrata source at once while
+   GeoSearch still resolves the address, which is a distinctive enough
+   signature to name. Without this the user sees six separate cryptic
+   status codes and cannot tell it is one cause. */
+const SOCRATA_SOURCES = ["hpd","dob","ecb","oath","taxes","complaints","owner","transfers"];
+
+function tokenTrouble(result){
+  const srcs = result.sources || {};
+  let present = 0, rejected = 0, limited = 0;
+  for(const key of SOCRATA_SOURCES){
+    const src = srcs[key];
+    if(!src) continue;
+    present++;
+    const st = String(src.status);
+    if(st.indexOf("403_token_rejected") !== -1) rejected++;
+    else if(st.indexOf("429_rate_limited") !== -1) limited++;
+  }
+  if(!present) return null;
+  if(rejected === present) return "rejected";
+  if(rejected + limited === present) return "limited";
+  return null;
+}
+
+function tokenBanner(kind){
+  if(kind === "rejected"){
+    return '<div class="tokenbanner"><strong>App token rejected.</strong> ' +
+           'Every NYC Open Data source returned 403. The token built into this page is ' +
+           'expired or invalid and has to be replaced before any lookup will work.</div>';
+  }
+  return '<div class="tokenbanner"><strong>Rate limited.</strong> ' +
+         'NYC Open Data is refusing requests for the moment. The token is fine; ' +
+         'wait a minute and run the lookup again.</div>';
+}
+
+/* --- category readiness --- */
+
+/* A tab is ready when every source it draws on has come back. Until then
+   its label carries the waiting mark and its panel says so. */
+function catState(cat, result){
+  const srcs = result.sources || {};
+  const needed = CATEGORY_SOURCES[cat.key] || [];
+  let failed = false;
+  for(const key of needed){
+    if(!srcs[key]) return "open";
+    if(String(srcs[key].status).startsWith("error")) failed = true;
+  }
+  return failed ? "failed" : "done";
+}
+
+function panelWaiting(cat){
+  const what = cat.key === "transfers" || cat.key === "ownership" || cat.key === "courtdocs"
+    ? "Reading ACRIS. Three chained queries against a large dataset, so this one takes a moment."
+    : "Still loading.";
+  return '<div class="wip"><span class="wip-label">Loading</span><p>' + esc(what) + '</p></div>';
+}
+
+/* --- tab badges --- */
+
+function badge(cat, result){
+  const srcs = result.sources || {};
+  if(cat.key === "ownership"){
+    const s = (srcs.owner || {}).summary || {};
+    return s.registered ? "" : '<span class="badge zero">\u2014</span>';
+  }
+  if(cat.key === "violations"){
+    const n = ["hpd","dob","ecb","oath"].reduce((sum, k) => {
+      const s = (srcs[k] || {}).summary || {};
+      const v = (s.open !== undefined) ? s.open : s.active;
+      return sum + (Number(v) || 0);
+    }, 0);
+    return '<span class="badge' + (n > 0 ? "" : " zero") + '">' + n + '</span>';
+  }
+  if(cat.key === "transfers"){
+    const t = srcs.transfers || {};
+    if(String(t.status).startsWith("error")) return '<span class="badge stub">?</span>';
+    const n = (t.summary || {}).doc_count || 0;
+    return '<span class="badge' + (n > 0 ? "" : " zero") + '">' + n + '</span>';
+  }
+  if(cat.key === "courtdocs"){
+    const o = (srcs.owner || {}).summary || {};
+    return o.registered ? "" : '<span class="badge zero">\u2014</span>';
+  }
+  if(cat.key === "taxes"){
+    const s = (srcs.taxes || {}).summary || {};
+    if(String((srcs.taxes || {}).status).startsWith("error")) return '<span class="badge stub">?</span>';
+    if(!s.on_lien_list) return '<span class="badge zero">\u2014</span>';
+    return '<span class="badge">' + s.stage + '/' + s.stage_max + '</span>';
+  }
+  return '<span class="badge stub">\u2014</span>';
+}
+
+/* --- the card --- */
+
+let cardSeq = 0;
+
+function activeTabOf(slot){
+  if(!slot) return null;
+  const on = slot.querySelector('.rtab[aria-selected="true"]');
+  return on ? on.dataset.tab : null;
+}
+
+function renderRow(result, wantActive){
+  const res = result.resolve || {};
+  const head = res.label || result.input;
+  let html = '<div class="result"><div class="cardhead"><div class="who"><h2>' + esc(head) + '</h2>';
+
+  if(String(res.status).startsWith("unresolved")){
+    html = '<div class="result"><h2>' + esc(head) + '</h2>';
+    const why = String(res.status).split(":").slice(1).join(":");
+    html += '<div class="unresolved">Could not resolve this address. <code>' + esc(why) + '</code></div></div>';
+    return html;
+  }
+
+  /* Meta line kept alongside the tags: the tags are for typing into the
+     city's three-box forms, the hyphenated string is for copying whole. */
+  html += '<div class="meta">BBL ' + esc(res.boro) + "-" + esc(res.block) + "-" + esc(res.lot) + '</div>';
+  html += '</div>';
+  html += '<div class="taglist">' + bblCells(res).filter(c => c[1]).map(([k,v]) =>
+    '<span class="tag"><span class="tag-k">' + esc(k) + '</span><span class="tag-v">' + esc(v) + '</span></span>'
+  ).join("") + '</div>';
+  html += '</div>';
+
+  const tt = tokenTrouble(result);
+  if(tt) html += tokenBanner(tt);
+
+  /* Only rendered when true. A banner that says "not a condo" on every card
+     stops being read within a week. */
+  const tsum = ((result.sources || {}).transfers || {}).summary || {};
+  if(tsum.is_condo){
+    html += '<div class="condo">Condominium lot. ' + tsum.unit_count +
+            ' unit designation' + (tsum.unit_count === 1 ? '' : 's') + ' recorded.' +
+            (tsum.units && tsum.units.length
+              ? ' <span class="units">' + esc(tsum.units.slice(0,12).join(", ")) +
+                (tsum.unit_count > 12 ? " ..." : "") + '</span>'
+              : "") +
+            '</div>';
+  }
+
+  const cid = "c" + (cardSeq++);
+  const active = wantActive || CATEGORIES[0].key;
+
+  const states = {};
+  for(const cat of CATEGORIES) states[cat.key] = catState(cat, result);
+
+  html += '<div class="rtabs" role="tablist">';
+  for(const cat of CATEGORIES){
+    const on = cat.key === active;
+    const st = states[cat.key];
+    const mark = st === "done" ? badge(cat, result)
+               : '<span class="badge stub">' + (st === "failed" ? ICON.failed : ICON.open) + '</span>';
+    html += '<button class="rtab" role="tab" type="button"' +
+            ' id="' + cid + '-tab-' + cat.key + '"' +
+            ' data-tab="' + cat.key + '"' +
+            ' aria-controls="' + cid + '-panel-' + cat.key + '"' +
+            ' aria-selected="' + on + '">' +
+            esc(cat.label) + mark +
+            '</button>';
+  }
+  html += '</div>';
+
+  for(const cat of CATEGORIES){
+    const on = cat.key === active;
+    html += '<div class="rpanel" role="tabpanel"' +
+            ' id="' + cid + '-panel-' + cat.key + '"' +
+            ' data-panel="' + cat.key + '"' +
+            ' aria-labelledby="' + cid + '-tab-' + cat.key + '"' +
+            (on ? "" : " hidden") + '>' +
+            (states[cat.key] === "open" ? panelWaiting(cat) : panelBody(cat, result)) +
+            '</div>';
+  }
+
+  if(result.flags && result.flags.length){
+    html += '<div class="flags">flags: ' + esc(result.flags.join("; ")) + '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+/* Shown only until the address resolves. After that the card itself
+   renders with per-tab loading marks, so there is nothing left for a
+   separate progress list to say. */
+function pendingCard(input){
+  return '<div class="result pending"><h2>' + esc(input) + '</h2>' +
+         '<div class="wip"><span class="wip-label">Looking up</span>' +
+         '<p>Resolving the address to a borough, block and lot.</p></div></div>';
+}
+
+/* ---------------------------------------------------------------- CSV */
+
+function toCSV(rows){
+  const q = v => {
+    const s = String(v === null || v === undefined ? "" : v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+  };
+  const lines = [FLAT_FIELDS.join(",")];
+  for(const r of rows) lines.push(FLAT_FIELDS.map(f => q(r[f])).join(","));
+  return lines.join("\n");
+}
+
+function stamp(){
+  const d = new Date();
+  const p = n => String(n).padStart(2,"0");
+  return d.getFullYear() + p(d.getMonth()+1) + p(d.getDate()) + "-" + p(d.getHours()) + p(d.getMinutes());
+}
+
+/* ---------------------------------------------------------------- driver */
+
+const $ = id => document.getElementById(id);
+const resultsEl = $("results");
+const barEl = $("bar");
+const countEl = $("count");
+const dlEl = $("download");
+const addrEl = $("addr");
+let dlURL = null;
+
+/* Card-scoped tab switching. One delegated listener on the results container,
+   so cards replaced by innerHTML keep working and five cards on the page
+   switch independently. */
+resultsEl.addEventListener("click", e => {
+  const tab = e.target.closest(".rtab");
+  if(!tab) return;
+  const card = tab.closest(".result");
+  if(!card) return;
+  const want = tab.dataset.tab;
+  for(const t of card.querySelectorAll(".rtab")){
+    t.setAttribute("aria-selected", String(t.dataset.tab === want));
+  }
+  for(const p of card.querySelectorAll(".rpanel")){
+    p.hidden = p.dataset.panel !== want;
+  }
+});
+
+function autoGrow(){
+  addrEl.style.height = "auto";
+  addrEl.style.height = addrEl.scrollHeight + "px";
+}
+addrEl.addEventListener("input", autoGrow);
+
+function busy(on){
+  $("go").disabled = on;
+}
+
+async function runAll(inputs){
+  if(!inputs.length) return;
+  busy(true);
+  if(dlURL){ URL.revokeObjectURL(dlURL); dlURL = null; }
+  dlEl.hidden = true;
+  barEl.hidden = false;
+
+  resultsEl.innerHTML = inputs.map((a,i) => '<div id="slot-' + i + '">' + pendingCard(a) + '</div>').join("");
+  let done = 0;
+  const update = () => { countEl.textContent = done + " of " + inputs.length + " looked up"; };
+  update();
+
+  const results = [];
+  for(let i = 0; i < inputs.length; i++){
+    /* Wave ticks carry the result object as it fills, so the card can be
+       drawn twice: once when the fast sources land, again when ACRIS does.
+       The tab the user is looking at survives the redraw. */
+    const note = (key, state, detail) => {
+      if((key === "wave1" || key === "wave2") && detail){
+        const slot = $("slot-" + i);
+        if(slot) slot.innerHTML = renderRow(detail, activeTabOf(slot));
+      }
+    };
+    let result;
+    try{ result = await check(inputs[i], note); }
+    catch(e){
+      result = {
+        input: inputs[i],
+        resolve: {status:"unresolved:crash", label:"", bbl:"", boro:"", block:"", lot:""},
+        sources: {},
+        flags: []
+      };
+      for(const key of SOURCE_ORDER) result.sources[key] = blankSource(key, "unresolved");
+    }
+    results.push(result);
+    const slot = $("slot-" + i);
+    if(slot) slot.innerHTML = renderRow(result, activeTabOf(slot));
+    done++;
+    update();
+  }
+
+  if(results.length > 1){
+    const blob = new Blob([toCSV(results.map(flatten))], {type:"text/csv;charset=utf-8"});
+    dlURL = URL.createObjectURL(blob);
+    dlEl.href = dlURL;
+    dlEl.download = "violations-" + stamp() + ".csv";
+    dlEl.hidden = false;
+  }
+  countEl.textContent = results.length + (results.length === 1 ? " address" : " addresses") + " looked up";
+  busy(false);
+}
+
+function submit(){
+  const list = addrEl.value.split("\n").map(s => s.trim()).filter(Boolean);
+  if(list.length) runAll(list);
+}
+
+$("go").addEventListener("click", submit);
+addrEl.addEventListener("keydown", e => {
+  if(e.key === "Enter" && !e.shiftKey){ e.preventDefault(); submit(); }
+});
+</script>
+</body>
+</html>
