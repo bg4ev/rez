@@ -180,10 +180,13 @@
   .tokenbanner strong{color:var(--signal)}
 
   .condo{
-    margin:10px 0 14px;padding:9px 13px;
+    margin:10px 0 14px;padding:10px 14px;
     border:1px solid var(--signal);border-radius:5px;
-    background:#fff;color:var(--signal);
+    background:#fdecea;color:var(--signal);
     font-size:14px;font-weight:500;
+  }
+  .condo.condo-maybe{
+    border-color:var(--warn);background:#fdf3e3;color:var(--warn);
   }
   .condo .units{font-family:var(--mono);font-size:12px;color:var(--ink-soft);font-weight:400}
 
@@ -311,7 +314,7 @@
 
 <footer>
   <div class="footer-text">
-    <p>Socrata Database Sources: HPD violations (wvxf-dwi5), HPD complaints (ygpa-z7cr), DOB violations (3h2n-5cm9), DOB ECB violations (6bgk-3dad), OATH hearings (jz4z-kudi), HPD registrations (tesw-yqqr, feu5-w2e2), tax lien sale lists (9rz4-mjek), ACRIS legals (8h5j-fqxa), ACRIS master (bnx9-e6tj), ACRIS parties (636b-3b5g), ACRIS document codes (7isb-wh4c). <br>Addresses are resolved to a borough, block, and lot through NYC GeoSearch.</p>
+    <p>Socrata Database Sources: HPD violations (wvxf-dwi5), HPD complaints (ygpa-z7cr), DOB violations (3h2n-5cm9), DOB ECB violations (6bgk-3dad), OATH hearings (jz4z-kudi), HPD registrations (tesw-yqqr, feu5-w2e2), tax lien sale lists (9rz4-mjek), ACRIS legals (8h5j-fqxa), ACRIS master (bnx9-e6tj), ACRIS parties (636b-3b5g), ACRIS document codes (7isb-wh4c), PLUTO (64uk-42ks). <br>Addresses are resolved to a borough, block, and lot through NYC GeoSearch.</p>
     <p>Made by <a href="https://rezonator.digital" target="_blank" rel="noopener">Brant Goodman</a> for <a href="https://auctionstoppers.nyc" target="_blank" rel="noopener">Auction Stoppers NYC.</a></p>
   </div>
   <img class="footer-logo-wide" src="logo_b.png" alt="Auction Stoppers NYC">
@@ -337,7 +340,8 @@ const DS = {
   master: SOCRATA + "/bnx9-e6tj.json",
   parties: SOCRATA + "/636b-3b5g.json",
   doccodes: SOCRATA + "/7isb-wh4c.json",
-  complaints: SOCRATA + "/ygpa-z7cr.json"
+  complaints: SOCRATA + "/ygpa-z7cr.json",
+  pluto: SOCRATA + "/64uk-42ks.json"
 };
 
 /* Socrata app tokens are meant to be sent openly; this one is visible in
@@ -348,6 +352,7 @@ const APP_TOKEN = "bpbnxgN9Gi7sOrD2f7Lr8RvIK";
 const ACRIS_WEB = "https://a836-acris.nyc.gov/CP/";
 const COURT_WEB = "https://iapps.courts.state.ny.us/nyscef/CaseSearch?TAB=name";
 const HPD_WEB   = "https://hpdonline.nyc.gov/hpdonline/";
+const ZOLA_WEB  = "https://zola.planning.nyc.gov/lot";
 const DOB_WEB   = "https://a810-bisweb.nyc.gov/bisweb/bispi00.jsp";
 /* OATH has no working public search page. The Summons Finder at
    a820-ecbticketfinder.nyc.gov does not load, so the OATH row carries no
@@ -392,10 +397,11 @@ const SOURCE_META = {
   oath:  ["OATH",  "violations"],
   taxes: ["Taxes", "taxes"],
   transfers: ["Records", "transfers"],
-  complaints: ["Complaints", "violations"]
+  complaints: ["Complaints", "violations"],
+  pluto: ["Property", "zola"]
 };
 
-const SOURCE_ORDER = ["owner","hpd","dob","ecb","oath","taxes","transfers","complaints"];
+const SOURCE_ORDER = ["owner","hpd","dob","ecb","oath","taxes","transfers","complaints","pluto"];
 
 function source(key, status, summary, records){
   const meta = SOURCE_META[key];
@@ -420,6 +426,7 @@ function blankSource(key, status){
    and so costs nothing at the end. */
 const CATEGORIES = [
   {key:"violations", label:"Violations", built:true, wave:1},
+  {key:"zola",       label:"ZOLA",       built:true, wave:1},
   {key:"taxes",      label:"Taxes",      built:true, wave:1},
   {key:"ownership",  label:"Ownership",  built:true, wave:2},
   {key:"transfers",  label:"Records",    built:true, wave:2},
@@ -429,10 +436,11 @@ const CATEGORIES = [
 /* Which sources have to land before a tab can render. */
 const CATEGORY_SOURCES = {
   violations: ["hpd","dob","ecb","oath","complaints"],
+  zola:       ["pluto"],
   taxes:      ["taxes"],
-  ownership:  ["owner","transfers"],
+  ownership:  ["owner","transfers","pluto"],
   transfers:  ["transfers"],
-  courtdocs:  ["owner","transfers"]
+  courtdocs:  ["owner","transfers","pluto"]
 };
 
 /* ---------------------------------------------------------------- topics */
@@ -675,6 +683,163 @@ async function qOATH(loc){
   });
 }
 
+/* ---------------------------------------------------------------- PLUTO
+
+Building class is the direct answer to "is this a condominium." The flag
+used to be inferred from the `unit` field in ACRIS Legals, which was wrong:
+1260 Grant Avenue is a three-family walk-up where one document out of
+thirty happened to name an apartment, and it got flagged as a condo.
+
+Class R is the condominium family. R0 is the billing lot DOF keeps for the
+complex; R1 and up are the unit lots. Verified that GeoSearch resolves a
+condo building's street address straight to the R0 billing lot, so a single
+query on the resolved BBL catches address lookups as well as BBL lookups.
+
+Two traps: bbl is a numeric column rendered as a float string
+("2024500113.00000000"), so a quoted match returns nothing. And billing lot
+records are sparse, with unit counts and building area missing, so empty
+fields are omitted rather than printed as blanks.
+-------------------------------------------------------------------------- */
+
+const LAND_USE = {
+  "01":"One and two family buildings", "02":"Multi-family walk-up buildings",
+  "03":"Multi-family elevator buildings", "04":"Mixed residential and commercial",
+  "05":"Commercial and office", "06":"Industrial and manufacturing",
+  "07":"Transportation and utility", "08":"Public facilities and institutions",
+  "09":"Open space and outdoor recreation", "10":"Parking facilities",
+  "11":"Vacant land"
+};
+
+const BLDG_CLASS = {
+  "A0":"One family, Cape Cod","A1":"One family, two stories detached",
+  "A2":"One family, one story","A3":"One family, large suburban",
+  "A4":"One family, city residence","A5":"One family, attached or semi-detached",
+  "A6":"One family, summer cottage","A7":"One family, mansion","A9":"One family, miscellaneous",
+  "B1":"Two family, brick","B2":"Two family, frame",
+  "B3":"Two family, converted from one family","B9":"Two family, miscellaneous",
+  "C0":"Walk-up apartments, three families","C1":"Walk-up apartments, over six families",
+  "C2":"Walk-up apartments, five to six families","C3":"Walk-up apartments, four families",
+  "C4":"Walk-up apartments, old law tenement","C5":"Walk-up apartments, converted",
+  "C6":"Walk-up co-operative","C7":"Walk-up apartments with stores",
+  "C8":"Walk-up co-operative","C9":"Garden apartments",
+  "D0":"Elevator co-operative","D1":"Elevator apartments, semi-fireproof",
+  "D3":"Elevator apartments, fireproof","D4":"Elevator co-operative",
+  "D5":"Elevator apartments, converted","D6":"Elevator apartments with stores",
+  "D7":"Elevator apartments with stores","D8":"Elevator apartments, luxury",
+  "D9":"Elevator apartments, miscellaneous",
+  "S0":"Primarily one family with two stores","S1":"Primarily one family with one store",
+  "S2":"Primarily two family with one store","S3":"Primarily three family with one store",
+  "S4":"Primarily four family with one store","S5":"Primarily five to six family with stores",
+  "S9":"Multiple use, miscellaneous",
+  "R0":"Condominium billing lot","R1":"Condominium, residential unit",
+  "R2":"Condominium, walk-up unit","R3":"Condominium, one to three unit building",
+  "R4":"Condominium, elevator unit","R5":"Condominium, commercial unit",
+  "R6":"Condominium, one to three units in a one or two family building",
+  "R7":"Condominium, one to three units with commercial",
+  "R8":"Condominium, one to three units with commercial",
+  "R9":"Co-operative within a condominium",
+  "RR":"Condominium rentals","RA":"Cultural condominium","RB":"Office condominium",
+  "RG":"Garage condominium","RH":"Hotel condominium","RK":"Retail condominium",
+  "RP":"Parking condominium","RS":"Storage condominium",
+  "RT":"Terraces or cabanas, condominium","RW":"Warehouse condominium",
+  "V0":"Vacant land, zoned residential","V1":"Vacant land, zoned commercial",
+  "V2":"Vacant land, adjoining improved lot","V3":"Vacant land, zoned primarily residential",
+  "V9":"Vacant land, miscellaneous"
+};
+
+const BLDG_FAMILY = {
+  A:"One family dwelling", B:"Two family dwelling", C:"Walk-up apartment",
+  D:"Elevator apartment", E:"Warehouse", F:"Factory or industrial", G:"Garage",
+  H:"Hotel", I:"Hospital or health", J:"Theatre", K:"Store", L:"Loft",
+  M:"Church or synagogue", N:"Asylum or home", O:"Office", P:"Place of assembly",
+  Q:"Outdoor recreation", R:"Condominium", S:"Mixed residential and commercial",
+  T:"Transportation", U:"Utility", V:"Vacant land", W:"Educational",
+  Y:"Government", Z:"Miscellaneous"
+};
+
+function className(code){
+  const c = String(code || "").trim().toUpperCase();
+  if(!c) return "";
+  if(BLDG_CLASS[c]) return BLDG_CLASS[c];
+  return BLDG_FAMILY[c.charAt(0)] || c;
+}
+
+function landUseName(code){
+  const c = String(code || "").trim();
+  if(!c) return "";
+  return LAND_USE[c.length === 1 ? "0" + c : c] || c;
+}
+
+/* PLUTO renders numbers as strings, sometimes with trailing zeros. Returns
+   null for anything missing so empty fields can be skipped rather than
+   printed as "None". */
+function pnum(v){
+  if(v === null || v === undefined || v === "") return null;
+  const f = Number(v);
+  if(!isFinite(f)) return null;
+  return f === Math.round(f) ? Math.round(f) : f;
+}
+
+function zolaURL(res){
+  return ZOLA_WEB + "/" + Number(res.boro) + "/" + Number(res.block) + "/" + Number(res.lot);
+}
+
+async function qPluto(loc){
+  /* Unquoted: bbl is numeric and a quoted match returns nothing. */
+  const [rows, err] = await getJSON(DS.pluto, {"$where": "bbl=" + Number(loc.bbl), "$limit": 5});
+  if(err) return blankSource("pluto", "error:" + err);
+
+  if(!rows || !rows.length){
+    /* Not a failure. PLUTO keeps one record per condominium complex rather
+       than one per unit, so a unit lot can be absent entirely. */
+    return source("pluto", "zero", {
+      in_pluto: false,
+      is_condo: null,
+      condo_reasons: ["No PLUTO record for this lot. PLUTO carries one record per " +
+                      "condominium complex rather than one per unit, so this can mean " +
+                      "a condo unit."]
+    });
+  }
+
+  const r = rows[0];
+  const cls = String(r.bldgclass || "").trim().toUpperCase();
+  const condono = String(r.condono || "").trim();
+  const reasons = [];
+  let isCondo = false;
+  if(cls.charAt(0) === "R"){
+    isCondo = true;
+    reasons.push("Building class " + cls + " is in the condominium family.");
+  }
+  if(condono && condono !== "0" && Number(condono) !== 0){
+    isCondo = true;
+    reasons.push("Condominium number " + condono + " on file.");
+  }
+  if(!isCondo) reasons.push("Building class " + (cls || "unknown") + " is not in the R family, and no condominium number is on file.");
+
+  return source("pluto", "ok", {
+    in_pluto: true,
+    is_condo: isCondo,
+    condo_reasons: reasons,
+    address: (r.address || "").trim(),
+    bldgclass: cls,
+    bldgclass_name: className(cls),
+    landuse_name: landUseName(r.landuse),
+    zonedist1: (r.zonedist1 || "").trim(),
+    ownername: (r.ownername || "").trim(),
+    yearbuilt: pnum(r.yearbuilt),
+    yearalter: Math.max(pnum(r.yearalter1) || 0, pnum(r.yearalter2) || 0) || null,
+    numbldgs: pnum(r.numbldgs),
+    numfloors: pnum(r.numfloors),
+    unitsres: pnum(r.unitsres),
+    unitstotal: pnum(r.unitstotal),
+    lotarea: pnum(r.lotarea),
+    bldgarea: pnum(r.bldgarea),
+    lotfront: pnum(r.lotfront),
+    lotdepth: pnum(r.lotdepth),
+    version: (r.version || "").trim()
+  }, rows.slice(0, 1));
+}
+
 /* HPD Online's "Complaints, last 2 years" card is a PROBLEM count, not a
    complaint count, despite the label. Verified: 375 Gates Avenue shows 82
    there, and count(*) over two years returns exactly 82 while
@@ -747,11 +912,18 @@ function ownerChain(result){
   const deed = tsum.deed || null;
   const deedNames = party2Names(tsum.deed_parties);
 
+  const plutoName = ((srcs.pluto || {}).summary || {}).ownername || "";
+
   const out = {registered: reg, role: regRole, deed_names: deedNames, deed: deed,
-               name: "", provenance: ""};
+               pluto_name: plutoName, name: "", provenance: ""};
   if(reg){
     out.name = reg;
     out.provenance = "HPD registration";
+  }else if(plutoName){
+    /* The DOF tax roll, refreshed annually, so usually fresher than a deed
+       from twenty years ago. */
+    out.name = plutoName;
+    out.provenance = "City tax roll (PLUTO)";
   }else if(deedNames.length){
     out.name = deedNames.join("; ");
     out.provenance = "Deed recorded " + (monthLabel(deed && deed.recorded) || (deed && deed.recorded) || "");
@@ -1010,7 +1182,7 @@ const ICON = {open:"\u2611\uFE0F", done:"\u2705", failed:"\u274C"};
    rounds of its own against the same host; running it alongside the others
    starves them, because browsers cap concurrent connections per host at
    about six. */
-const WAVE_ONE = [["hpd", qHPD], ["dob", qDOB], ["ecb", qECB], ["oath", qOATH], ["taxes", qTaxes], ["complaints", qComplaints]];
+const WAVE_ONE = [["hpd", qHPD], ["dob", qDOB], ["ecb", qECB], ["oath", qOATH], ["taxes", qTaxes], ["complaints", qComplaints], ["pluto", qPluto]];
 const WAVE_TWO = [["transfers", qTransfers], ["owner", qOwner]];
 
 async function check(input, note){
@@ -1084,7 +1256,9 @@ const FLAT_FIELDS = [
   "acris_status","acris_doc_count","acris_is_condo","acris_deed_type","acris_deed_recorded","acris_deed_amount",
   "acris_deed_party2","acris_contracts","acris_court_orders","acris_easements",
   "owner_name","owner_source",
-  "complaints_status","complaints_2yr","complaint_calls_2yr"
+  "complaints_status","complaints_2yr","complaint_calls_2yr",
+  "pluto_status","building_class","building_class_name","land_use","zoning","is_condo",
+  "year_built","units_res","units_total","lot_area","building_area","pluto_owner"
 ];
 
 function blankFlat(){
@@ -1166,6 +1340,23 @@ function flatten(result){
     row.complaint_calls_2yr = cp.summary.calls === null ? "" : cp.summary.calls;
   }
 
+  const pl = srcs.pluto || {};
+  row.pluto_status = pl.status || "";
+  if(has(pl)){
+    const s = pl.summary;
+    row.building_class = s.bldgclass || "";
+    row.building_class_name = s.bldgclass_name || "";
+    row.land_use = s.landuse_name || "";
+    row.zoning = s.zonedist1 || "";
+    row.is_condo = s.is_condo === null ? "unknown" : (s.is_condo ? "yes" : "no");
+    row.year_built = s.yearbuilt === null || s.yearbuilt === undefined ? "" : s.yearbuilt;
+    row.units_res = s.unitsres === null || s.unitsres === undefined ? "" : s.unitsres;
+    row.units_total = s.unitstotal === null || s.unitstotal === undefined ? "" : s.unitstotal;
+    row.lot_area = s.lotarea === null || s.lotarea === undefined ? "" : s.lotarea;
+    row.building_area = s.bldgarea === null || s.bldgarea === undefined ? "" : s.bldgarea;
+    row.pluto_owner = s.ownername || "";
+  }
+
   const tr = srcs.transfers || {};
   row.acris_status = tr.status || "";
   if(has(tr)){
@@ -1244,7 +1435,10 @@ function panelOwnership(result){
 
   /* Worth showing separately when the registered agent and the person on
      the deed are different people. */
-  if(o.deed_names.length && o.registered){
+  if(o.pluto_name && o.pluto_name !== o.name){
+    html += '<dt>Tax roll</dt><dd>' + esc(o.pluto_name) + '</dd>';
+  }
+  if(o.deed_names.length && o.deed_names.join("; ") !== o.name){
     html += '<dt>Took title</dt><dd>' + esc(o.deed_names.join("; ")) +
             ', ' + esc(monthLabel(o.deed.recorded) || o.deed.recorded) + '</dd>';
   }
@@ -1454,7 +1648,7 @@ function panelCourtDocs(result){
   let cells = [];
   if(o.name){
         cells = [["Name(s)", o.name]];
-    if(o.provenance.indexOf("Deed") === 0){
+    if(o.provenance.indexOf("Deed") === 0 || o.provenance.indexOf("City tax roll") === 0){
       html += '<p class="note">This name is whoever took title, which may not be who holds it now. ' +
               'A later sale, a death, or a transfer missing from ACRIS Open Data would not show here.</p>';
     }
@@ -1469,6 +1663,57 @@ function panelCourtDocs(result){
   return html;
 }
 
+function panelZola(result){
+  const src = (result.sources || {}).pluto || {};
+  const s = src.summary || {};
+  const res = result.resolve || {};
+  let html = "";
+
+  if(String(src.status).startsWith("error")){
+    html += '<dl class="kv"><dt>PLUTO</dt><dd class="empty">' +
+            '<span class="warn-icon">\u26A0\uFE0F</span>lookup failed</dd></dl>';
+  }else if(!s.in_pluto){
+    html += '<dl class="kv"><dt>PLUTO</dt><dd class="empty">No record retrieved for this lot</dd></dl>';
+    html += '<p class="note">' + esc(s.condo_reasons ? s.condo_reasons[0] : "") + '</p>';
+  }else{
+    /* Billing lot records are sparse, so every row is conditional rather
+       than printing "None" down the panel. */
+    const rows = [];
+    if(s.address) rows.push(["Address", s.address]);
+    if(s.bldgclass) rows.push(["Building class", s.bldgclass + "  " + s.bldgclass_name]);
+    if(s.landuse_name) rows.push(["Land use", s.landuse_name]);
+    if(s.zonedist1) rows.push(["Zoning", s.zonedist1]);
+    if(s.ownername) rows.push(["Owner on the tax roll", s.ownername]);
+    if(s.yearbuilt) rows.push(["Built", String(s.yearbuilt) + (s.yearalter ? ", altered " + s.yearalter : "")]);
+    if(s.unitsres !== null && s.unitsres !== undefined){
+      rows.push(["Units", s.unitsres + " residential" +
+                 (s.unitstotal !== null && s.unitstotal !== s.unitsres ? " of " + s.unitstotal + " total" : "")]);
+    }
+    if(s.numbldgs || s.numfloors){
+      rows.push(["Structure", [s.numbldgs ? s.numbldgs + (s.numbldgs === 1 ? " building" : " buildings") : "",
+                               s.numfloors ? s.numfloors + " floors" : ""].filter(Boolean).join(", ")]);
+    }
+    if(s.lotarea){
+      rows.push(["Lot", s.lotarea.toLocaleString("en-US") + " sq ft" +
+                 (s.lotfront && s.lotdepth ? " (" + s.lotfront + " \u00d7 " + s.lotdepth + " ft)" : "")]);
+    }
+    if(s.bldgarea) rows.push(["Building area", s.bldgarea.toLocaleString("en-US") + " sq ft"]);
+
+    html += '<dl class="kv">' + rows.map(([k,v]) =>
+      '<dt>' + esc(k) + '</dt><dd>' + esc(v) + '</dd>').join("") + '</dl>';
+
+    if(s.is_condo){
+      html += '<p class="note"><strong>Condominium.</strong> ' +
+              esc((s.condo_reasons || []).join(" ")) + '</p>';
+    }
+  }
+
+  html += handoff("PLUTO" + (s.version ? " " + s.version : "") +
+                  ", the same data ZOLA draws on. Open the lot on the map:",
+                  [["Open ZOLA", zolaURL(res)]]);
+  return html;
+}
+
 function panelStub(cat){
   return '<div class="wip"><span class="wip-label">Under construction</span>' +
          '<p>' + esc(cat.note) + '</p></div>';
@@ -1480,6 +1725,7 @@ function panelBody(cat, result){
   if(cat.key === "taxes") return panelTaxes(result);
   if(cat.key === "transfers") return panelTransfers(result);
   if(cat.key === "courtdocs") return panelCourtDocs(result);
+  if(cat.key === "zola") return panelZola(result);
   return panelStub(cat);
 }
 
@@ -1489,7 +1735,7 @@ function panelBody(cat, result){
    GeoSearch still resolves the address, which is a distinctive enough
    signature to name. Without this the user sees six separate cryptic
    status codes and cannot tell it is one cause. */
-const SOCRATA_SOURCES = ["hpd","dob","ecb","oath","taxes","complaints","owner","transfers"];
+const SOCRATA_SOURCES = ["hpd","dob","ecb","oath","taxes","complaints","owner","transfers","pluto"];
 
 function tokenTrouble(result){
   const srcs = result.sources || {};
@@ -1557,6 +1803,13 @@ function badge(cat, result){
     }, 0);
     return '<span class="badge' + (n > 0 ? "" : " zero") + '">' + n + '</span>';
   }
+  if(cat.key === "zola"){
+    const p = srcs.pluto || {};
+    if(String(p.status).startsWith("error")) return '<span class="badge stub">?</span>';
+    const s = p.summary || {};
+    if(!s.in_pluto) return '<span class="badge stub">\u2014</span>';
+    return '<span class="badge' + (s.is_condo ? "" : " zero") + '">' + esc(s.bldgclass || "\u2014") + '</span>';
+  }
   if(cat.key === "transfers"){
     const t = srcs.transfers || {};
     if(String(t.status).startsWith("error")) return '<span class="badge stub">?</span>';
@@ -1602,7 +1855,10 @@ function renderRow(result, wantActive){
      city's three-box forms, the hyphenated string is for copying whole. */
   html += '<div class="meta">BBL ' + esc(res.boro) + "-" + esc(res.block) + "-" + esc(res.lot) + '</div>';
   html += '</div>';
-  html += '<div class="taglist">' + bblCells(res).filter(c => c[1]).map(([k,v]) =>
+  const psum = ((result.sources || {}).pluto || {}).summary || {};
+  const headCells = bblCells(res);
+  if(psum.bldgclass) headCells.push(["Class", psum.bldgclass]);
+  html += '<div class="taglist">' + headCells.filter(c => c[1]).map(([k,v]) =>
     '<span class="tag"><span class="tag-k">' + esc(k) + '</span><span class="tag-v">' + esc(v) + '</span></span>'
   ).join("") + '</div>';
   html += '</div>';
@@ -1611,16 +1867,14 @@ function renderRow(result, wantActive){
   if(tt) html += tokenBanner(tt);
 
   /* Only rendered when true. A banner that says "not a condo" on every card
-     stops being read within a week. */
-  const tsum = ((result.sources || {}).transfers || {}).summary || {};
-  if(tsum.is_condo){
-    html += '<div class="condo">Condominium lot. ' + tsum.unit_count +
-            ' unit designation' + (tsum.unit_count === 1 ? '' : 's') + ' recorded.' +
-            (tsum.units && tsum.units.length
-              ? ' <span class="units">' + esc(tsum.units.slice(0,12).join(", ")) +
-                (tsum.unit_count > 12 ? " ..." : "") + '</span>'
-              : "") +
-            '</div>';
+     stops being read within a week. Building class from PLUTO, not the old
+     ACRIS unit inference, which produced false positives. */
+  if(psum.is_condo){
+    html += '<div class="condo"><strong>Condominium.</strong> ' +
+            esc(psum.bldgclass + " \u2014 " + psum.bldgclass_name) + '</div>';
+  }else if(psum.in_pluto === false){
+    html += '<div class="condo condo-maybe"><strong>Possibly a condominium unit.</strong> ' +
+            'No PLUTO record for this lot, which is what a condo unit looks like.</div>';
   }
 
   const cid = "c" + (cardSeq++);
