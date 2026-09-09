@@ -353,6 +353,10 @@ const ACRIS_WEB = "https://a836-acris.nyc.gov/CP/";
 const COURT_WEB = "https://iapps.courts.state.ny.us/nyscef/CaseSearch?TAB=name";
 const HPD_WEB   = "https://hpdonline.nyc.gov/hpdonline/";
 const ZOLA_WEB  = "https://zola.planning.nyc.gov/lot";
+/* CityPay is where DOB and ECB money owed is actually paid. It shows a
+   settlement offer alongside the original penalty; open data carries only
+   the original figures, so our total reads higher than her cart. */
+const CITYPAY_WEB = "https://a836-citypay.nyc.gov/citypay/ecb";
 const DOB_WEB   = "https://a810-bisweb.nyc.gov/bisweb/bispi00.jsp";
 /* OATH has no working public search page. The Summons Finder at
    a820-ecbticketfinder.nyc.gov does not load, so the OATH row carries no
@@ -673,12 +677,37 @@ async function qOATH(loc){
 
   const opens = rows.filter(isOpen);
   const otherRows = rows.filter(r => !isDOB(r)).map(r => String(r.issuing_agency || "?").trim());
+
+  /* The money was already being retrieved and thrown away. Balance due is
+     the outstanding figure, zero on dismissed and paid cases, so summing
+     every row needs no filtering. Imposed and paid are kept alongside it
+     because a large imposed total that is fully paid reads differently
+     from the same total unpaid. */
+  const money = r => {
+    const n = Number(r);
+    return isFinite(n) ? n : 0;
+  };
+  let balance = 0, imposed = 0, paid = 0, fees = 0, withBalance = 0;
+  for(const r of rows){
+    const b = money(r.balance_due);
+    balance += b;
+    imposed += money(r.penalty_imposed);
+    paid += money(r.paid_amount);
+    fees += money(r.additional_penalties_or_late_fees);
+    if(b > 0) withBalance++;
+  }
+
   return source("oath", rows.length ? "ok" : "zero", {
     open: opens.length,
     total: rows.length,
     dob_related: rows.filter(isDOB).length,
     other_agencies: counted(otherRows, 3),
     topics: topicSummary(opens.map(r => r.charge_1_code_description || "")),
+    balance_due: Math.round(balance * 100) / 100,
+    penalty_imposed: Math.round(imposed * 100) / 100,
+    paid_amount: Math.round(paid * 100) / 100,
+    late_fees: Math.round(fees * 100) / 100,
+    cases_with_balance: withBalance,
     variant: null
   });
 }
@@ -1106,6 +1135,14 @@ async function fetchParties(docId){
   })).filter(p => p.name);
 }
 
+/* Balances get compared against CityPay line by line, so cents matter
+   here in a way they do not for a deed price. */
+function money2(v){
+  const n = Number(v);
+  if(!isFinite(n)) return "";
+  return "$" + n.toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
 function money(v){
   const n = Number(v);
   if(!isFinite(n) || n <= 0) return "";
@@ -1257,6 +1294,7 @@ const FLAT_FIELDS = [
   "acris_deed_party2","acris_contracts","acris_court_orders","acris_easements",
   "owner_name","owner_source",
   "complaints_status","complaints_2yr","complaint_calls_2yr",
+  "oath_balance_due","oath_cases_with_balance","oath_penalty_imposed","oath_paid_amount",
   "pluto_status","building_class","building_class_name","land_use","zoning","is_condo",
   "year_built","units_res","units_total","lot_area","building_area","pluto_owner"
 ];
@@ -1319,6 +1357,10 @@ function flatten(result){
     row.oath_dob_related = s.dob_related;
     row.oath_other_agencies = agenciesText(s.other_agencies);
     row.oath_topics = topicsText(s.topics);
+    row.oath_balance_due = s.balance_due === undefined ? "" : s.balance_due;
+    row.oath_cases_with_balance = s.cases_with_balance === undefined ? "" : s.cases_with_balance;
+    row.oath_penalty_imposed = s.penalty_imposed === undefined ? "" : s.penalty_imposed;
+    row.oath_paid_amount = s.paid_amount === undefined ? "" : s.paid_amount;
   }
 
   const taxes = srcs.taxes || {};
@@ -1488,8 +1530,25 @@ function panelViolations(result){
   if(extra.length) oathRight = (oathRight ? oathRight + " \u2014 " : "") + extra.join("; ");
   html += srcLine("OATH", oath.status, oathNum, oathRight);
 
-  html += handoff("These datasets lag the agency systems, so anything that matters is worth confirming at the source. There is no working public search page for OATH.",
-                  [["HPD Online", HPD_WEB], ["DOB BIS", DOB_WEB]]);
+  /* Elana asked for "money owed for DOB and ECB violations" as one figure
+     rather than a breakdown by agency, so it gets its own line rather than
+     sitting on the OATH row where the data happens to come from. */
+  if(!String(oath.status).startsWith("error") && o.balance_due !== undefined){
+    let owedNum;
+    if(o.balance_due > 0){
+      owedNum = '<span class="n-open">' + esc(money2(o.balance_due)) + '</span> across ' +
+                o.cases_with_balance + ' summons' + (o.cases_with_balance === 1 ? '' : 'es');
+    }else{
+      owedNum = '<span class="n-none">nothing outstanding</span>' +
+                (o.penalty_imposed > 0 ? ' \u00b7 ' + esc(money2(o.penalty_imposed)) + ' imposed, paid' : "");
+    }
+    const detail = o.balance_due > 0 && o.late_fees > 0
+      ? esc(money2(o.late_fees)) + " of that is late fees" : "";
+    html += srcLine("Owed", oath.status, owedNum, detail);
+  }
+
+  html += handoff("These datasets lag the agency systems, so anything that matters is worth confirming at the source. Amounts owed come from OATH and do not include the settlement offers CityPay shows, so the figure there is often lower. There is no working public search page for OATH itself.",
+                  [["HPD Online", HPD_WEB], ["DOB BIS", DOB_WEB], ["CityPay (ECB)", CITYPAY_WEB]]);
   return html;
 }
 
@@ -1791,9 +1850,12 @@ function panelWaiting(cat){
 
 function badge(cat, result){
   const srcs = result.sources || {};
+  /* Reads the whole owner chain, not just HPD registration. A name found
+     on a deed or the tax roll is still a name found. */
   if(cat.key === "ownership"){
-    const s = (srcs.owner || {}).summary || {};
-    return s.registered ? "" : '<span class="badge zero">\u2014</span>';
+    return ownerChain(result).name
+      ? '<span class="badge zero">\u2713</span>'
+      : '<span class="badge stub">\u2014</span>';
   }
   if(cat.key === "violations"){
     const n = ["hpd","dob","ecb","oath"].reduce((sum, k) => {
@@ -1817,8 +1879,9 @@ function badge(cat, result){
     return '<span class="badge' + (n > 0 ? "" : " zero") + '">' + n + '</span>';
   }
   if(cat.key === "courtdocs"){
-    const o = (srcs.owner || {}).summary || {};
-    return o.registered ? "" : '<span class="badge zero">\u2014</span>';
+    return ownerChain(result).name
+      ? '<span class="badge zero">\u2713</span>'
+      : '<span class="badge stub">\u2014</span>';
   }
   if(cat.key === "taxes"){
     const s = (srcs.taxes || {}).summary || {};
