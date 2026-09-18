@@ -1,0 +1,89 @@
+name: ACRIS court order leads
+
+on:
+  schedule:
+    # 09:15 and 21:15 UTC = 5:15am and 5:15pm Eastern in daylight time,
+    # 4:15 once it ends. ACRIS records 8am to 5pm Eastern, half of it after
+    # 3pm, so the evening run catches the day and the morning run confirms it.
+    - cron: "15 9 * * *"
+    - cron: "15 21 * * *"
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "How many days back to pull (ACRIS caps the search at 31)"
+        required: false
+        default: "2"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: acris-leads
+  cancel-in-progress: false
+
+jobs:
+  pull:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install tesseract
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tesseract-ocr
+
+      - name: Pull the document index from ACRIS
+        env:
+          DAYS: ${{ github.event.inputs.days || '2' }}
+        run: |
+          python3 scripts/acris_live.py --days "$DAYS" --out /tmp/run \
+            || echo "acris_live found nothing, or failed; checking below"
+
+      - name: Read the documents and merge into the feed
+        run: |
+          if [ ! -f /tmp/run.json ]; then
+            echo "No index file; nothing recorded in that window. Stopping cleanly."
+            exit 0
+          fi
+          python3 scripts/ctor_leads.py \
+            --json /tmp/run.json \
+            --out /tmp/run_leads \
+            --feed leads.json
+
+      - name: Commit the feed if it changed
+        run: |
+          if [ ! -f leads.json ]; then
+            echo "No feed file to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add leads.json
+          if git diff --staged --quiet; then
+            echo "Feed unchanged."
+          else
+            git commit -m "leads: $(date -u '+%Y-%m-%d %H:%M UTC')"
+            git push
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f leads.json ]; then
+            python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          d = json.load(open("leads.json"))
+          print(f"**{d['count']} documents in the feed**\n")
+          print(f"- in rem: {d['in_rem']}")
+          print(f"- foreclosure and sale: {d['jfs']}")
+          print(f"- updated: {d['updated']}")
+          PY
+          fi
