@@ -282,6 +282,48 @@
     .kv{grid-template-columns:1fr;gap:2px 0}
     .kv dd{margin-bottom:8px}
   }
+
+  /* ---- Recent court orders feed ---- */
+  .nav{display:flex;gap:6px;border-bottom:1px solid var(--rule);margin:0 0 24px}
+  .nav-tab{font:inherit;font-size:15px;font-weight:500;
+           background:none;border:none;border-bottom:2px solid transparent;
+           color:var(--ink-soft);padding:9px 2px;margin-right:22px;cursor:pointer}
+  .nav-tab:hover{color:var(--ink)}
+  .nav-tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink)}
+  body.on-feed .wrap{max-width:1280px}
+  #page-lookup[hidden],#feedsec[hidden]{display:none}
+
+  .feedhead{display:flex;align-items:baseline;justify-content:flex-end;
+            gap:16px;flex-wrap:wrap;margin:0 0 12px}
+  .feedstamp{font-family:var(--mono);font-size:13px;color:var(--quiet)}
+  .ftabs{display:flex;gap:4px;flex-wrap:wrap;align-items:center;
+         border-bottom:1px solid var(--rule);margin:0 0 14px;padding-bottom:10px}
+  .ftab{font:inherit;font-size:13px;font-weight:500;
+        background:none;border:1px solid transparent;color:var(--ink-soft);
+        padding:5px 11px;border-radius:5px;cursor:pointer;
+        display:inline-flex;align-items:center;gap:7px}
+  .ftab:hover{color:var(--ink);background:var(--paper)}
+  .ftab[aria-selected="true"]{background:var(--paper);border-color:var(--rule);color:var(--ink)}
+  .ftab .badge{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--ink-soft)}
+  #feedfilter{flex:1 1 220px;min-width:180px;margin-left:auto;
+              font-size:14px;padding:7px 11px}
+
+  .fflag{flex:none;font-family:var(--mono);font-size:13px;font-weight:600;
+         text-transform:uppercase;letter-spacing:.09em;
+         border:1px solid;border-radius:4px;padding:6px 14px;white-space:nowrap}
+  .fflag.in_rem{color:#fff;border-color:var(--signal);background:var(--signal)}
+  .fflag.jfs{color:#fff;border-color:var(--warn);background:var(--warn)}
+  .result.lead-in_rem{background:#fdecea;border-color:var(--signal);border-left-width:5px}
+  .result.lead-jfs{background:#fdf3e3;border-color:var(--warn);border-left-width:5px}
+  .result.lead-in_rem .meta,.result.lead-jfs .meta,
+  .result.lead-in_rem .faddr,.result.lead-jfs .faddr{color:#6b5148}
+
+  .ftitle{font-size:15px;margin:2px 0 0;max-width:74ch}
+  .faddr{font-family:var(--mono);font-size:13px;color:var(--ink-soft)}
+  #feedmore{font:inherit;font-size:14px;font-weight:500;color:var(--ink);
+            border:1px solid var(--rule);background:var(--card);
+            border-radius:5px;padding:9px 16px;cursor:pointer;margin-top:4px}
+  #feedmore:hover{border-color:var(--ink)}
 </style>
 </head>
 <body>
@@ -291,6 +333,13 @@
   <h1>AS NYC – Property Research Webtool</h1>
   <p class="sub">Finds important data for any address in the five boroughs.</p>
 </header>
+
+<nav class="nav">
+  <button class="nav-tab" data-page="lookup" aria-selected="true">Address lookup</button>
+  <button class="nav-tab" data-page="feed">Recent court orders</button>
+</nav>
+
+<div id="page-lookup">
 
 <div class="panel">
   <div class="row">
@@ -311,6 +360,22 @@
 </div>
 
 <div id="results"></div>
+</div>
+
+<section id="feedsec" hidden>
+  <div class="feedhead">
+    <span class="feedstamp" id="feedstamp">loading…</span>
+  </div>
+  <div class="ftabs">
+    <button class="ftab" data-view="all" aria-selected="true">All <span class="badge"></span></button>
+    <button class="ftab" data-view="in_rem">In rem <span class="badge"></span></button>
+    <button class="ftab" data-view="jfs">Foreclosure &amp; sale <span class="badge"></span></button>
+    <button class="ftab" data-view="other">Everything else <span class="badge"></span></button>
+    <input type="text" id="feedfilter" placeholder="Filter by address, name or index no." autocomplete="off">
+  </div>
+  <div id="feedlist"></div>
+  <button id="feedmore" hidden>Show more</button>
+</section>
 
 <footer>
   <div class="footer-text">
@@ -2105,6 +2170,117 @@ $("go").addEventListener("click", submit);
 addrEl.addEventListener("keydown", e => {
   if(e.key === "Enter" && !e.shiftKey){ e.preventDefault(); submit(); }
 });
+
+/* ---- Recent court orders feed ---------------------------------------- */
+(function(){
+  const FEED_URL = "./leads.json";
+  const sec   = document.getElementById("feedsec");
+  if(!sec) return;
+  const stamp = document.getElementById("feedstamp");
+  const list  = document.getElementById("feedlist");
+  const box   = document.getElementById("feedfilter");
+  const tabs  = Array.from(sec.querySelectorAll(".ftab"));
+  const more  = document.getElementById("feedmore");
+
+  const PAGE = 40;
+  let rows = [], view = "all", shown = PAGE;
+
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g,
+    c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+  const kind = r => r.in_rem ? "in_rem" : (r.jfs ? "jfs" : "other");
+
+  function party(r, n){
+    const name = r["p" + n + "_name"];
+    if(!name) return "";
+    const bits = [r["p"+n+"_address"], r["p"+n+"_city"], r["p"+n+"_state"], r["p"+n+"_zip"]]
+                 .filter(Boolean).join(", ");
+    return '<dt>Party ' + n + '</dt><dd>' + esc(name) +
+           (bits ? '<br><span class="faddr">' + esc(bits) + '</span>' : '') + '</dd>';
+  }
+
+  function card(r){
+    const k = kind(r);
+    const label = k === "in_rem" ? "IN REM" : (k === "jfs" ? "FORECLOSURE &amp; SALE" : "");
+    const loc = [r.borough, r.block && ("block " + r.block), r.lot && ("lot " + r.lot)]
+                .filter(Boolean).join(" \u00b7 ");
+    return '<div class="result' + (k !== "other" ? " lead-" + k : "") + '">' +
+      '<div class="cardhead"><div class="who">' +
+        '<h2>' + esc(r.property_address || "(no address on the parcel record)") + '</h2>' +
+        '<div class="meta">' + esc(r.recorded || "") + (loc ? " \u00b7 " + esc(loc) : "") +
+        (r.property_type ? ' \u00b7 <span class="owner">' + esc(r.property_type) + '</span>' : '') +
+        '</div></div>' +
+        (label ? '<span class="fflag ' + k + '">' + label + '</span>' : '') +
+      '</div>' +
+      '<p class="ftitle">' + esc(r.title || "(no title read)") + '</p>' +
+      '<dl class="kv">' + party(r, 1) + party(r, 2) +
+        (r.index_no ? '<dt>Index no.</dt><dd class="code">' + esc(r.index_no) + '</dd>' : '') +
+      '</dl>' +
+      '<a class="portal-link" href="' + esc(r.acris_link) + '" target="_blank" rel="noopener">Open document</a> ' +
+      '<a class="portal-link" href="' + esc(r.detail_link) + '" target="_blank" rel="noopener">Parties &amp; parcel</a>' +
+    '</div>';
+  }
+
+  function matches(r){
+    if(view !== "all" && kind(r) !== view) return false;
+    const q = box.value.trim().toLowerCase();
+    if(!q) return true;
+    return [r.property_address, r.p1_name, r.p2_name, r.title, r.index_no, r.borough]
+           .some(v => v && String(v).toLowerCase().includes(q));
+  }
+
+  function draw(){
+    const hits = rows.filter(matches);
+    list.innerHTML = hits.slice(0, shown).map(card).join("") ||
+      '<p class="note">Nothing matches that filter.</p>';
+    more.hidden = hits.length <= shown;
+    more.textContent = "Show " + Math.min(PAGE, hits.length - shown) + " more";
+    tabs.forEach(t => {
+      const n = t.dataset.view === "all" ? rows.length
+              : rows.filter(r => kind(r) === t.dataset.view).length;
+      const b = t.querySelector(".badge");
+      if(b) b.textContent = n;
+    });
+  }
+
+  tabs.forEach(t => t.addEventListener("click", () => {
+    tabs.forEach(x => x.setAttribute("aria-selected", x === t ? "true" : "false"));
+    view = t.dataset.view; shown = PAGE; draw();
+  }));
+  box.addEventListener("input", () => { shown = PAGE; draw(); });
+  more.addEventListener("click", () => { shown += PAGE; draw(); });
+
+  fetch(FEED_URL, {cache:"no-store"})
+    .then(r => { if(!r.ok) throw new Error(r.status); return r.json(); })
+    .then(d => {
+      rows = Array.isArray(d.records) ? d.records : [];
+      const when = d.updated ? new Date(d.updated) : null;
+      stamp.textContent = rows.length + " documents" +
+        (when && !isNaN(when) ? " \u00b7 updated " + when.toLocaleString() : "");
+      draw();
+    })
+    .catch(() => {
+      stamp.textContent = "";
+      list.innerHTML = '<p class="note">No feed published yet. ' +
+        'The daily job writes leads.json to the site root.</p>';
+    });
+})();
+
+/* ---- page switching --------------------------------------------------- */
+(function(){
+  const navs = Array.from(document.querySelectorAll(".nav-tab"));
+  if(!navs.length) return;
+  const pages = {lookup: document.getElementById("page-lookup"),
+                 feed:   document.getElementById("feedsec")};
+  function show(name){
+    navs.forEach(b => b.setAttribute("aria-selected", b.dataset.page === name ? "true" : "false"));
+    Object.keys(pages).forEach(k => { if(pages[k]) pages[k].hidden = (k !== name); });
+    document.body.classList.toggle("on-feed", name === "feed");
+  }
+  navs.forEach(b => b.addEventListener("click", () => show(b.dataset.page)));
+  show("lookup");
+})();
+
 </script>
 </body>
 </html>
