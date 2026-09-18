@@ -39,6 +39,15 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq tesseract-ocr
+          
+      - name: Diagnose ACRIS reachability
+        run: |
+          curl -s -o /tmp/form.html -w "status=%{http_code} bytes=%{size_download} time=%{time_total}\n" \
+            -A "Mozilla/5.0" -c /tmp/jar \
+            "https://a836-acris.nyc.gov/DS/DocumentSearch/DocumentType" || echo "curl exit code $?"
+          echo "--- token found: $(grep -c '__RequestVerificationToken' /tmp/form.html || true) ---"
+          echo "--- first 400 chars ---"
+          head -c 400 /tmp/form.html; echo
 
       - name: Pull the document index from ACRIS
         env:
