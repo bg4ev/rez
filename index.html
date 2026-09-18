@@ -320,10 +320,10 @@
 
   .ftitle{font-size:15px;margin:2px 0 0;max-width:74ch}
   .faddr{font-family:var(--mono);font-size:13px;color:var(--ink-soft)}
-  #feedmore{font:inherit;font-size:14px;font-weight:500;color:var(--ink);
+  #feedmore,#feedcsv{font:inherit;font-size:14px;font-weight:500;color:var(--ink);
             border:1px solid var(--rule);background:var(--card);
             border-radius:5px;padding:9px 16px;cursor:pointer;margin-top:4px}
-  #feedmore:hover{border-color:var(--ink)}
+  #feedmore:hover,#feedcsv:hover{border-color:var(--ink)}
 </style>
 </head>
 <body>
@@ -375,6 +375,7 @@
   </div>
   <div id="feedlist"></div>
   <button id="feedmore" hidden>Show More</button>
+  <button id="feedcsv">Download CSV</button>
 </section>
 
 <footer>
@@ -2248,6 +2249,36 @@ addrEl.addEventListener("keydown", e => {
   }));
   box.addEventListener("input", () => { shown = PAGE; draw(); });
   more.addEventListener("click", () => { shown += PAGE; draw(); });
+  const CSV_COLS = [
+    ["Recorded",      r => r.recorded],
+    ["Type",          r => r.in_rem ? "IN REM" : (r.jfs ? "FORECLOSURE AND SALE" : "")],
+    ["Order title",   r => r.title],
+    ["Property",      r => r.property_address],
+    ["Borough",       r => r.borough],
+    ["Block",         r => r.block],
+    ["Lot",           r => r.lot],
+    ["Property type", r => r.property_type],
+    ["Party 1",       r => r.p1_name],
+    ["Party 1 address", r => [r.p1_address, r.p1_city, r.p1_state, r.p1_zip].filter(Boolean).join(", ")],
+    ["Party 2",       r => r.p2_name],
+    ["Party 2 address", r => [r.p2_address, r.p2_city, r.p2_state, r.p2_zip].filter(Boolean).join(", ")],
+    ["Index no.",     r => r.index_no],
+    ["ACRIS link",    r => r.acris_link],
+  ];
+
+  document.getElementById("feedcsv").addEventListener("click", () => {
+    const hits = rows.filter(matches);
+    if(!hits.length) return;
+    const q = v => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
+    const lines = [CSV_COLS.map(c => q(c[0])).join(",")];
+    hits.forEach(r => lines.push(CSV_COLS.map(c => q(c[1](r))).join(",")));
+    const blob = new Blob(["\ufeff" + lines.join("\r\n")], {type: "text/csv;charset=utf-8"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "asnyc-court-orders-" + new Date().toISOString().slice(0,10) + ".csv";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
 
   fetch(FEED_URL, {cache:"no-store"})
     .then(r => { if(!r.ok) throw new Error(r.status); return r.json(); })
