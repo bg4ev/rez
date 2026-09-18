@@ -189,9 +189,16 @@ def main():
     print(f"{args.doctype}  {start} to {end}  borough {args.borough}")
     found, seen = [], set()
     for page_no in range(1, MAX_PAGES + 1):
-        rows = search_page(page_no, args.doctype, start, end, args.borough, jar)
+        rows = None
+        for attempt in range(3):
+            rows = search_page(page_no, args.doctype, start, end, args.borough, jar)
+            if rows is not None:
+                break
+            print(f"  no token on attempt {attempt + 1}, retrying")
+            time.sleep(3 * (attempt + 1))
         if rows is None:
-            sys.exit("could not get a request token; the search form may have changed")
+            print("could not get a request token after 3 tries", file=sys.stderr)
+            sys.exit(2)
         fresh = [(d, c) for d, c in rows if d not in seen]
         for d, _ in fresh:
             seen.add(d)
