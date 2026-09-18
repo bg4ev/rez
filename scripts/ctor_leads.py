@@ -207,7 +207,7 @@ def merge_feed(path, records, keep_days):
     cutoff = datetime.datetime.now() - datetime.timedelta(days=keep_days)
     kept = [r for r in rows if when(r) >= cutoff or when(r) == datetime.datetime.min]
 
-    json.dump({"updated": datetime.datetime.now().isoformat(timespec="seconds"),
+    json.dump({"updated": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
                "count": len(kept),
                "in_rem": sum(1 for r in kept if r.get("in_rem")),
                "jfs": sum(1 for r in kept if r.get("jfs")),
