@@ -63,32 +63,47 @@ jobs:
           fi
           if [ $code -ne 0 ]; then
             echo "Nothing recorded in that window."
+            echo "OUTCOME=nothing recorded" >> "$GITHUB_ENV"
           fi
 
       - name: Read the documents and merge into the feed
         run: |
           if [ ! -f /tmp/run.json ]; then
             echo "No index file; nothing recorded in that window. Stopping cleanly."
+            echo "OUTCOME=nothing recorded" >> "$GITHUB_ENV"
             exit 0
           fi
           python3 scripts/ctor_leads.py \
             --json /tmp/run.json \
             --out /tmp/run_leads \
             --feed leads.json
+          echo "OUTCOME=documents read" >> "$GITHUB_ENV"
 
-      - name: Commit the feed if it changed
+      # Runs every time, including after a failure, so the page always
+      # shows when the job last ran. OUTCOME is unset only if neither
+      # success path above was reached, which is recorded as failed.
+      - name: Write run status
+        if: always()
         run: |
-          if [ ! -f leads.json ]; then
-            echo "No feed file to commit."
-            exit 0
-          fi
+          python3 - <<'PY'
+          import json, os, datetime
+          json.dump({"checked": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+                     "outcome": os.environ.get("OUTCOME") or "failed"},
+                    open("status.json", "w", encoding="utf-8"), indent=1)
+          PY
+
+      - name: Commit the feed and run status
+        if: always()
+        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add leads.json
+          [ -f status.json ] && git add status.json
+          [ -f leads.json ] && git add leads.json
           if git diff --staged --quiet; then
-            echo "Feed unchanged."
+            echo "Nothing to commit."
           else
-            git commit -m "leads: $(date -u '+%Y-%m-%d %H:%M UTC')"
+            git commit -m "leads: $(date -u '+%Y-%m-%d %H:%M UTC') (${OUTCOME:-failed})"
+            git pull --rebase --autostash
             git push
           fi
 
@@ -102,6 +117,13 @@ jobs:
           print(f"**{d['count']} documents in the feed**\n")
           print(f"- in rem: {d['in_rem']}")
           print(f"- foreclosure and sale: {d['jfs']}")
-          print(f"- updated: {d['updated']}")
+          print(f"- feed changed: {d['updated']}")
+          PY
+          fi
+          if [ -f status.json ]; then
+            python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          s = json.load(open("status.json"))
+          print(f"- checked: {s['checked']} ({s['outcome']})")
           PY
           fi
