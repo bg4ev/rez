@@ -2175,6 +2175,7 @@ addrEl.addEventListener("keydown", e => {
 /* ---- Recent court orders feed ---------------------------------------- */
 (function(){
   const FEED_URL = "./leads.json";
+  const STATUS_URL = "./status.json";
   const sec   = document.getElementById("feedsec");
   if(!sec) return;
   const stamp = document.getElementById("feedstamp");
@@ -2280,13 +2281,30 @@ addrEl.addEventListener("keydown", e => {
     URL.revokeObjectURL(a.href);
   });
 
-  fetch(FEED_URL, {cache:"no-store"})
-    .then(r => { if(!r.ok) throw new Error(r.status); return r.json(); })
-    .then(d => {
+  const stampTime = v => {
+    const t = v ? new Date(v) : null;
+    return t && !isNaN(t) ? t.toLocaleString() : "";
+  };
+
+  Promise.all([
+    fetch(FEED_URL, {cache:"no-store"})
+      .then(r => { if(!r.ok) throw new Error(r.status); return r.json(); }),
+    fetch(STATUS_URL, {cache:"no-store"})
+      .then(r => r.ok ? r.json() : null)
+      .catch(() => null)
+  ])
+    .then(([d, s]) => {
       rows = Array.isArray(d.records) ? d.records : [];
-      const when = d.updated ? new Date(d.updated) : null;
-      stamp.textContent = rows.length + " documents" +
-        (when && !isNaN(when) ? " \u00b7 updated " + when.toLocaleString() : "");
+      const changed = stampTime(d.updated);
+      const checked = s ? stampTime(s.checked) : "";
+      let line = rows.length + " documents";
+      if(checked){
+        line += " \u00b7 checked " + checked + (s.outcome ? " (" + s.outcome + ")" : "");
+        if(changed) line += " \u00b7 feed changed " + changed;
+      } else if(changed){
+        line += " \u00b7 updated " + changed;
+      }
+      stamp.textContent = line;
       draw();
     })
     .catch(() => {
