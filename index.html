@@ -2250,21 +2250,78 @@ addrEl.addEventListener("keydown", e => {
   }));
   box.addEventListener("input", () => { shown = PAGE; draw(); });
   more.addEventListener("click", () => { shown += PAGE; draw(); });
+  // Batch-puller CSV: one row per party, courts and lenders dropped,
+  // duplicates collapsed on name + property address. Ported from csv_test.py.
+  const LISTS = ["Bankruptcy", "Judgment", "Everything else"];
+  const SUFFIXES = new Set(["JR", "SR", "II", "III", "IV"]);
+  const ENTITY_WORDS = [
+    "LLC", "L.L.C.", "INC", "CORP", "CORPORATION", "COMPANY", "LP", "L.P.",
+    "LTD", "TRUST", "TRUSTEE", "TRUSTEES", "ESTATE", "COURT", "FUND",
+    "MORTGAGE", "HOLDINGS", "PARTNERS", "ASSOCIATES", "ASSOCIATION",
+    "ASSOCIATIONS", "ET AL", "BANK", "SAVINGS", "EXECUTOR", "EXECUTRIX",
+    "ADMINISTRATOR", "ADMINISTRATRIX", "LODGE", "FUNDING", "SERVICING",
+    "CAPITAL", "REALTY", "PROPERTIES", "MANAGEMENT", "DEVELOPMENT", "GROUP",
+    "SOCIETY", "CHURCH", "INVESTMENTS", "VENTURES", "AUTHORITY", "DEPARTMENT",
+    "CITY OF", "PROPERTY", "PROPERTYIN",
+  ];
+  const ENTITY_RE = new RegExp("(?<![A-Z0-9])(" +
+    ENTITY_WORDS.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") + ")(?![A-Z0-9])");
+  const DROP_RE = /\bCOURT\b|\bU\.?\s?S\.?\s?B\.\s?C\b|\bUNITED STATES OF AMERICA\b|\bBANK\b|\bN\.\s?A\b\.?|\bMORTGAGE\b|\bSAVINGS\b|\bLOAN\b|\bLENDER\b|\bSERVICING\b|\bISSUER\b/;
+  const normName = s => String(s || "").toUpperCase().replace(/\s+/g, " ").trim();
+  const noDots = s => s.replace(/\./g, "");
+  const dateNum = s => {
+    const m = String(s || "").split(" ")[0].match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    return m ? +m[3] * 10000 + +m[1] * 100 + +m[2] : 0;
+  };
+  function splitName(name){
+    if(!name.includes(",") || ENTITY_RE.test(name)) return ["", name];
+    const parts = name.split(",").map(p => p.trim());
+    let last = parts[0];
+    const rest = parts.slice(1).filter(Boolean);
+    while(rest.length && SUFFIXES.has(noDots(rest[0]))) last += " " + noDots(rest.shift());
+    while(rest.length > 1 && SUFFIXES.has(noDots(rest[rest.length - 1]))) last += " " + noDots(rest.pop());
+    let first = rest.join(", ");
+    const toks = first.split(/\s+/).filter(Boolean);
+    if(toks.length > 1 && SUFFIXES.has(noDots(toks[toks.length - 1]))){
+      last += " " + noDots(toks.pop());
+      first = toks.join(" ");
+    }
+    return first ? [first, last] : ["", last];
+  }
+  function partyRows(recs){
+    const best = new Map();
+    recs.forEach(rec => {
+      const list = rec.in_rem ? "Bankruptcy" : (rec.jfs ? "Judgment" : "Everything else");
+      ["p1_name", "p2_name", "p3_name"].forEach(k => {
+        const name = normName(rec[k]);
+        if(!name || DROP_RE.test(name)) return;
+        const [first, last] = splitName(name);
+        const row = { list, first,
+          last: first ? last : "",
+          company: first ? "" : name,
+          addr: String(rec.property_address || "").trim(),
+          borough: String(rec.borough || ""),
+          date: String(rec.recorded || "").split(" ")[0] };
+        const key = name + "|" + normName(row.addr);
+        const cur = best.get(key);
+        if(!cur) { best.set(key, row); return; }
+        const rn = LISTS.indexOf(row.list), rc = LISTS.indexOf(cur.list);
+        if(rn < rc || (rn === rc && dateNum(row.date) > dateNum(cur.date))) best.set(key, row);
+      });
+    });
+    return [...best.values()].sort((a, b) =>
+      LISTS.indexOf(a.list) - LISTS.indexOf(b.list) ||
+      (dateNum(a.date) === 0) - (dateNum(b.date) === 0) ||
+      dateNum(b.date) - dateNum(a.date));
+  }
   const CSV_COLS = [
-    ["Recorded",      r => r.recorded],
-    ["Type",          r => r.in_rem ? "IN REM" : (r.jfs ? "FORECLOSURE AND SALE" : "")],
-    ["Order title",   r => r.title],
-    ["Property",      r => r.property_address],
-    ["Borough",       r => r.borough],
-    ["Block",         r => r.block],
-    ["Lot",           r => r.lot],
-    ["Property type", r => r.property_type],
-    ["Party 1",       r => r.p1_name],
-    ["Party 1 address", r => [r.p1_address, r.p1_city, r.p1_state, r.p1_zip].filter(Boolean).join(", ")],
-    ["Party 2",       r => r.p2_name],
-    ["Party 2 address", r => [r.p2_address, r.p2_city, r.p2_state, r.p2_zip].filter(Boolean).join(", ")],
-    ["Index no.",     r => r.index_no],
-    ["ACRIS link",    r => r.acris_link],
+    ["List",             r => r.list],
+    ["First name",       r => r.first],
+    ["Last name",        r => r.last],
+    ["Company",          r => r.company],
+    ["Property address", r => r.addr],
+    ["Borough",          r => r.borough],
+    ["Date added",       r => r.date],
   ];
 
   document.getElementById("feedcsv").addEventListener("click", () => {
@@ -2272,7 +2329,7 @@ addrEl.addEventListener("keydown", e => {
     if(!hits.length) return;
     const q = v => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
     const lines = [CSV_COLS.map(c => q(c[0])).join(",")];
-    hits.forEach(r => lines.push(CSV_COLS.map(c => q(c[1](r))).join(",")));
+    partyRows(hits).forEach(r => lines.push(CSV_COLS.map(c => q(c[1](r))).join(",")));
     const blob = new Blob(["\ufeff" + lines.join("\r\n")], {type: "text/csv;charset=utf-8"});
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
