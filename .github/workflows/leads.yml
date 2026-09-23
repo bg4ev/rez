@@ -42,6 +42,7 @@ jobs:
 
       - name: Diagnose ACRIS reachability
         run: |
+          echo "runner ip: $(curl -s --max-time 10 https://api.ipify.org || echo unknown)"
           curl -s -o /tmp/form.html -w "status=%{http_code} bytes=%{size_download} time=%{time_total}\n" \
             -A "Mozilla/5.0" -c /tmp/jar \
             "https://a836-acris.nyc.gov/DS/DocumentSearch/DocumentType" || echo "curl exit code $?"
