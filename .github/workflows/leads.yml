@@ -2,11 +2,7 @@ name: ACRIS court order leads
 
 on:
   schedule:
-    # 09:15 and 21:15 UTC = 5:15am and 5:15pm Eastern in daylight time,
-    # 4:15 once it ends. ACRIS records 8am to 5pm Eastern, half of it after
-    # 3pm, so the evening run catches the day and the morning run confirms it.
-    - cron: "15 9 * * 1-5"
-    - cron: "15 21 * * 1-5"
+    - cron: "15 16 * * 1-5"
   workflow_dispatch:
     inputs:
       days:
@@ -52,7 +48,7 @@ jobs:
 
       - name: Pull the document index from ACRIS
         env:
-          DAYS: ${{ github.event.inputs.days || '2' }}
+          DAYS: ${{ github.event.inputs.days || '4' }}
         run: |
           set +e
           python3 scripts/acris_live.py --days "$DAYS" --out /tmp/run
