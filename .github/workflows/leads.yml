@@ -8,7 +8,7 @@ on:
       days:
         description: "How many days back to pull (ACRIS caps the search at 31)"
         required: false
-        default: "2"
+        default: "4"
 
 permissions:
   contents: write
@@ -25,6 +25,9 @@ jobs:
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
+
+      - name: Save the feed before this run
+        run: cp leads.json /tmp/leads_before.json
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -124,3 +127,12 @@ jobs:
           print(f"- checked: {s['checked']} ({s['outcome']})")
           PY
           fi
+
+      # Runs only when every step above succeeded, so a blocked pull sends
+      # nothing and GitHub's own failure email goes out instead.
+      - name: Email the new court orders
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: python3 scripts/csv_email.py --old /tmp/leads_before.json --new leads.json
