@@ -2,7 +2,7 @@ name: ACRIS court order leads
 
 on:
   schedule:
-    - cron: "15 16 * * 1-5"
+    - cron: "15 16 * * 2,4"
   workflow_dispatch:
     inputs:
       days:
@@ -51,7 +51,7 @@ jobs:
 
       - name: Pull the document index from ACRIS
         env:
-          DAYS: ${{ github.event.inputs.days || '4' }}
+          DAYS: ${{ github.event.inputs.days || '7' }}
         run: |
           set +e
           python3 scripts/acris_live.py --days "$DAYS" --out /tmp/run
